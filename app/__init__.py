@@ -1,10 +1,8 @@
 from flask import Flask
 
-def create_app():
-    app = Flask(__name__)
-    
-    # Import routes
-    from .routes import main
-    app.register_blueprint(main)
+app = Flask(__name__)
+app.secret_key = "supersecretkey"  # change this in production
 
-    return app
+# Import and register blueprints
+from app.routes import main
+app.register_blueprint(main)
