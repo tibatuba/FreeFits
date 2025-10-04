@@ -3,28 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home - My Flask App</title>
+    <title>FreeFits - Free Clothing Marketplace</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <header>
-        <h1>My Flask App</h1>
+        <div class="header-content">
+            <h1>FreeFits</h1>
+            <nav class="user-nav">
+                {% if username %}
+                    <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
+                    <a href="{{ url_for('main.register') }}" class="nav-link">Register</a>
+                {% endif %}
+            </nav>
+        </div>
     </header>
 
-    <main>
-        <h2>Welcome to my Flask app!</h2>
-        {% if username %}
-            <p>Hello, {{ username }}! You are logged in.</p>
-            <a href="{{ url_for('main.logout') }}">Logout</a>
-        {% else %}
-            <p>You are not logged in. Please <a href="{{ url_for('main.login') }}">login</a></p>
-        {% endif %}
-        <p>This is a simple home page. You can add more pages and links in your routes.</p>
-        <a href="#">Learn more</a>
+    <main class="marketplace">
+        <!-- Search and Filter Section -->
+        <div class="search-section">
+            <form method="GET" class="search-form">
+                <div class="search-row">
+                    <input type="text" name="search" placeholder="Search for sustainable clothing items..." 
+                           value="{{ search_query }}" class="search-input">
+                    <input type="text" name="location" placeholder="Your location (e.g., Toronto, ON)" 
+                           value="{{ location_filter }}" class="location-input">
+                    <select name="distance" class="distance-select">
+                        <option value="">Any distance</option>
+                        <option value="5" {% if distance_filter == '5' %}selected{% endif %}>Within 5 km</option>
+                        <option value="10" {% if distance_filter == '10' %}selected{% endif %}>Within 10 km</option>
+                        <option value="20" {% if distance_filter == '20' %}selected{% endif %}>Within 20 km</option>
+                        <option value="50" {% if distance_filter == '50' %}selected{% endif %}>Within 50 km</option>
+                    </select>
+                    <button type="submit" class="search-btn">Search</button>
+                </div>
+                <div class="filter-row">
+                    <select name="category" class="category-select">
+                        <option value="">All Categories</option>
+                        <option value="Tops" {% if category_filter == 'Tops' %}selected{% endif %}>Tops</option>
+                        <option value="Dresses" {% if category_filter == 'Dresses' %}selected{% endif %}>Dresses</option>
+                        <option value="Jackets" {% if category_filter == 'Jackets' %}selected{% endif %}>Jackets</option>
+                        <option value="Pants" {% if category_filter == 'Pants' %}selected{% endif %}>Pants</option>
+                        <option value="Shoes" {% if category_filter == 'Shoes' %}selected{% endif %}>Shoes</option>
+                        <option value="Accessories" {% if category_filter == 'Accessories' %}selected{% endif %}>Accessories</option>
+                        <option value="Sweaters" {% if category_filter == 'Sweaters' %}selected{% endif %}>Sweaters</option>
+                    </select>
+                    {% if username %}
+                        <a href="#" class="post-listing-btn">+ Post New Item</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section">
+        <div class="results-header">
+            <h2>🌱 Latest Eco-Friendly Items</h2>
+            <span class="results-count">{{ listings|length }} sustainable items found</span>
+        </div>
+
+            {% if listings %}
+                <div class="listings-grid">
+                    {% for listing in listings %}
+                    <div class="listing-card">
+                        <div class="listing-image">
+                            <div class="placeholder-image">📷</div>
+                        </div>
+                        <div class="listing-content">
+                            <h3 class="listing-title">{{ listing.title }}</h3>
+                            <p class="listing-description">{{ listing.description }}</p>
+                            <div class="listing-details">
+                                <span class="category">{{ listing.category }}</span>
+                                <span class="size">Size: {{ listing.size }}</span>
+                                <span class="condition">{{ listing.condition }}</span>
+                            </div>
+                            <div class="listing-location">
+                                📍 {{ listing.location }}
+                            </div>
+                            <div class="listing-actions">
+                                <button class="contact-btn">Contact Seller</button>
+                                <span class="free-badge">FREE</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="no-results">
+                    <h3>No items found</h3>
+                    <p>Try adjusting your search criteria or check back later for new listings!</p>
+                </div>
+            {% endif %}
+        </div>
     </main>
 
     <footer>
-        &copy; 2025 My Flask App
+        &copy; 2025 FreeFits - Free Clothing Marketplace
     </footer>
 </body>
 </html>

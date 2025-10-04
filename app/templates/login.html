@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - My Flask App</title>
+    <title>Login - FreeFits</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <header>
-        <h1>My Flask App</h1>
+        <h1>FreeFits</h1>
     </header>
 
     <main>
-        <h2>Enter your login credentials</h2>
+        <h2>Welcome Back!</h2>
+        <p class="subtitle">Sign in to your FreeFits account</p>
         <form action="{{ url_for('main.login') }}" method="post">
             <label for="username">Username:</label>
             <input type="text" id="username" name="username" placeholder="Enter your Username" required>
@@ -31,7 +32,7 @@
     </main>
 
     <footer>
-        &copy; 2025 My Flask App
+        &copy; 2025 FreeFits - Free Clothing Marketplace
     </footer>
 </body>
 </html>
