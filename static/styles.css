@@ -1,0 +1,4 @@
+/* Minimal styling for placeholder images and avatar */
+.mock-img { max-height: 600px; object-fit: contain; }
+.mock-img-lg { max-height: 300px; object-fit: contain; }
+.avatar { width: 56px; height: 56px; }

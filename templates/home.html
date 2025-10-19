@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-3">Browse Listings</h1>
+
+<form class="row g-2 align-items-center mb-3">
+  <div class="col-sm-4">
+    <input type="text" class="form-control" name="q" placeholder="Search listings..." value="{{ q or '' }}">
+  </div>
+  <div class="col-sm-3">
+    <select class="form-select" name="category">
+      <option value="">All Categories</option>
+      {% for c in categories %}
+      <option value="{{ c }}" {% if category==c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-sm-3">
+    <select class="form-select" name="location">
+      <option value="">All Locations</option>
+      {% for l in locations %}
+      <option value="{{ l }}" {% if location==l %}selected{% endif %}>{{ l }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-sm-2">
+    <button class="btn btn-primary w-100" type="submit">Filter</button>
+  </div>
+</form>
+
+<div class="row g-3">
+  {% for l in listings %}
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center">
+        <img src="{{ url_for('static', filename='img/' ~ l.image) }}" class="p-3 mock-img" alt="{{ l.title }}">
+      </div>
+      <div class="card-body d-flex flex-column">
+        <h5 class="card-title">{{ l.title }}</h5>
+        <p class="card-text small text-muted">{{ l.category }} • {{ l.location }}</p>
+        <p class="card-text flex-grow-1">{{ l.description }}</p>
+        <a href="{{ url_for('listing_detail', listing_id=l.id) }}" class="btn btn-outline-primary mt-auto">View Details</a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+    <p>No listings match your search.</p>
+  {% endfor %}
+</div>
+{% endblock %}

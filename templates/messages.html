@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="mb-3">Messages</h2>
+<div class="row">
+  <div class="col-md-4">
+    <div class="list-group">
+      {% for c in conversations %}
+      <a href="{{ url_for('conversation', convo_id=c.id) }}" class="list-group-item list-group-item-action">
+        <div class="d-flex w-100 justify-content-between">
+          <h6 class="mb-1">{{ c.with }}</h6>
+          <small>Listing #{{ c.listing_id }}</small>
+        </div>
+        <small class="text-muted">{{ c.messages[-1].sender }}: {{ c.messages[-1].text }}</small>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-md-8 d-flex align-items-center justify-content-center text-muted">
+    <p>Select a conversation to view the thread.</p>
+  </div>
+</div>
+{% endblock %}

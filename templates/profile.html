@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-3">
+  <div class="avatar bg-secondary rounded-circle"></div>
+  <div>
+    <h3 class="mb-0">{{ user.name }}</h3>
+    <small class="text-muted">{{ user.email }}</small>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link active" href="#">My Listings</a></li>
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('messages') }}">My Messages</a></li>
+  <li class="nav-item"><a class="nav-link disabled">Settings (mock)</a></li>
+</ul>
+
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr><th>Item</th><th>Category</th><th>Location</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for l in my_listings %}
+      <tr>
+        <td><a href="{{ url_for('listing_detail', listing_id=l.id) }}">{{ l.title }}</a></td>
+        <td>{{ l.category }}</td>
+        <td>{{ l.location }}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-primary" disabled>Edit</button>
+          <button class="btn btn-sm btn-outline-danger" disabled>Delete</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

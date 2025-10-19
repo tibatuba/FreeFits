@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center">
+      <img src="{{ url_for('static', filename='img/' ~ listing.image) }}" class="p-4 mock-img-lg" alt="{{ listing.title }}">
+    </div>
+  </div>
+  <div class="col-md-6">
+    <h2>{{ listing.title }}</h2>
+    <p class="text-muted">{{ listing.category }} • {{ listing.location }}</p>
+    <p>{{ listing.description }}</p>
+    <div class="d-flex gap-2">
+      {% if convo %}
+        <a class="btn btn-primary" href="{{ url_for('conversation', convo_id=convo.id) }}">Open Conversation</a>
+      {% endif %}
+      <a class="btn btn-outline-secondary" href="{{ url_for('messages') }}">Contact Seller</a>
+      <a class="btn btn-outline-danger">Report Listing</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
