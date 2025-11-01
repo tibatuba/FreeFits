@@ -102,3 +102,29 @@ def search_listings(query, category=None, location=None, max_distance=None):
         results = [listing for listing in results if location.lower() in listing.location.lower()]
     
     return sorted(results, key=lambda x: x.created_at, reverse=True)
+
+def get_listing_by_id(listing_id):
+    """Get a listing by its ID"""
+    for listing in sample_listings:
+        if listing.id == listing_id:
+            return listing
+    return None
+
+def create_listing(title, description, category, size, condition, location, user_id):
+    """Create a new listing and add it to sample_listings"""
+    # Get the next available ID
+    next_id = max([listing.id for listing in sample_listings], default=0) + 1
+    
+    new_listing = Listing(
+        id=next_id,
+        title=title,
+        description=description,
+        category=category,
+        size=size,
+        condition=condition,
+        location=location,
+        user_id=user_id
+    )
+    
+    sample_listings.append(new_listing)
+    return new_listing

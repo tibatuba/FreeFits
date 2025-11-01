@@ -1,5 +1,5 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session
-from app.models import get_latest_listings, search_listings
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing
 
 main = Blueprint("main", __name__)
 
@@ -77,3 +77,74 @@ def register():
         return redirect(url_for("main.home"))
 
     return render_template("register.html")
+
+# View individual listing route
+@main.route("/listing/<int:listing_id>")
+def view_listing(listing_id):
+    username = session.get("username")
+    listing = get_listing_by_id(listing_id)
+    
+    if not listing:
+        flash("Listing not found.", "error")
+        return redirect(url_for("main.home"))
+    
+    return render_template("listing_detail.html", listing=listing, username=username)
+
+# Create listing route (requires authentication)
+@main.route("/create", methods=["GET", "POST"])
+def create_listing_page():
+    username = session.get("username")
+    
+    # Require authentication to create listing
+    if not username:
+        flash("Please log in to create a listing.", "error")
+        return redirect(url_for("main.login"))
+    
+    if request.method == "POST":
+        title = request.form.get("title")
+        description = request.form.get("description")
+        category = request.form.get("category")
+        size = request.form.get("size")
+        condition = request.form.get("condition")
+        location = request.form.get("location")
+        
+        # Basic validation
+        if not all([title, description, category, size, condition, location]):
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error="All fields are required.")
+        
+        # Create the listing
+        new_listing = create_listing(
+            title=title,
+            description=description,
+            category=category,
+            size=size,
+            condition=condition,
+            location=location,
+            user_id=username
+        )
+        
+        flash("Listing created successfully!", "success")
+        return redirect(url_for("main.view_listing", listing_id=new_listing.id))
+    
+    return render_template("create_listing.html", username=username)
+
+# Contact/Message seller route (requires authentication)
+@main.route("/listing/<int:listing_id>/contact", methods=["POST"])
+def contact_seller(listing_id):
+    username = session.get("username")
+    
+    # Require authentication to contact seller
+    if not username:
+        flash("Please log in to contact the seller.", "error")
+        return redirect(url_for("main.login"))
+    
+    listing = get_listing_by_id(listing_id)
+    if not listing:
+        flash("Listing not found.", "error")
+        return redirect(url_for("main.home"))
+    
+    # For now, just show a message (you can implement actual messaging later)
+    flash(f"Message sent to seller for '{listing.title}'! (This is a demo - messaging will be implemented later)", "success")
+    return redirect(url_for("main.view_listing", listing_id=listing_id))

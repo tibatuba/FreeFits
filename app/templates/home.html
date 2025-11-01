@@ -23,6 +23,14 @@
     </header>
 
     <main class="marketplace">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         <!-- Search and Filter Section -->
         <div class="search-section">
             <form method="GET" class="search-form">
@@ -52,7 +60,7 @@
                         <option value="Sweaters" {% if category_filter == 'Sweaters' %}selected{% endif %}>Sweaters</option>
                     </select>
                     {% if username %}
-                        <a href="#" class="post-listing-btn">+ Post New Item</a>
+                        <a href="{{ url_for('main.create_listing_page') }}" class="post-listing-btn">+ Post New Item</a>
                     {% endif %}
                 </div>
             </form>
@@ -68,27 +76,29 @@
             {% if listings %}
                 <div class="listings-grid">
                     {% for listing in listings %}
-                    <div class="listing-card">
-                        <div class="listing-image">
-                            <div class="placeholder-image">📷</div>
+                    <a href="{{ url_for('main.view_listing', listing_id=listing.id) }}" class="listing-card-link">
+                        <div class="listing-card">
+                            <div class="listing-image">
+                                <div class="placeholder-image">📷</div>
+                            </div>
+                            <div class="listing-content">
+                                <h3 class="listing-title">{{ listing.title }}</h3>
+                                <p class="listing-description">{{ listing.description }}</p>
+                                <div class="listing-details">
+                                    <span class="category">{{ listing.category }}</span>
+                                    <span class="size">Size: {{ listing.size }}</span>
+                                    <span class="condition">{{ listing.condition }}</span>
+                                </div>
+                                <div class="listing-location">
+                                    📍 {{ listing.location }}
+                                </div>
+                                <div class="listing-actions">
+                                    <span class="view-details-btn">View Details →</span>
+                                    <span class="free-badge">FREE</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="listing-content">
-                            <h3 class="listing-title">{{ listing.title }}</h3>
-                            <p class="listing-description">{{ listing.description }}</p>
-                            <div class="listing-details">
-                                <span class="category">{{ listing.category }}</span>
-                                <span class="size">Size: {{ listing.size }}</span>
-                                <span class="condition">{{ listing.condition }}</span>
-                            </div>
-                            <div class="listing-location">
-                                📍 {{ listing.location }}
-                            </div>
-                            <div class="listing-actions">
-                                <button class="contact-btn">Contact Seller</button>
-                                <span class="free-badge">FREE</span>
-                            </div>
-                        </div>
-                    </div>
+                    </a>
                     {% endfor %}
                 </div>
             {% else %}

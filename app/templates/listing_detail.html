@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ listing.title }} - FreeFits</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1><a href="{{ url_for('main.home') }}" style="text-decoration: none; color: inherit;">FreeFits</a></h1>
+            <nav class="user-nav">
+                {% if username %}
+                    <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
+                    <a href="{{ url_for('main.register') }}" class="nav-link">Register</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="listing-detail-page">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="detail-container">
+            <div class="detail-back-link">
+                <a href="{{ url_for('main.home') }}">← Back to Marketplace</a>
+            </div>
+
+            <div class="detail-content">
+                <div class="detail-image-section">
+                    <div class="detail-image">
+                        <div class="placeholder-image">📷</div>
+                    </div>
+                </div>
+
+                <div class="detail-info-section">
+                    <div class="detail-header">
+                        <h2 class="detail-title">{{ listing.title }}</h2>
+                        <span class="free-badge">FREE</span>
+                    </div>
+
+                    <div class="detail-meta">
+                        <span class="category">{{ listing.category }}</span>
+                        <span class="size">Size: {{ listing.size }}</span>
+                        <span class="condition">{{ listing.condition }}</span>
+                    </div>
+
+                    <div class="detail-description">
+                        <h3>Description</h3>
+                        <p>{{ listing.description }}</p>
+                    </div>
+
+                    <div class="detail-location">
+                        <h3>📍 Location</h3>
+                        <p>{{ listing.location }}</p>
+                    </div>
+
+                    <div class="detail-actions">
+                        {% if username %}
+                            <form action="{{ url_for('main.contact_seller', listing_id=listing.id) }}" method="POST">
+                                <button type="submit" class="contact-btn-large">💬 Contact Seller</button>
+                            </form>
+                        {% else %}
+                            <a href="{{ url_for('main.login') }}" class="contact-btn-large">💬 Login to Contact Seller</a>
+                        {% endif %}
+                    </div>
+
+                    <div class="detail-footer">
+                        <p class="detail-posted">Posted by: {{ listing.user_id }}</p>
+                        <p class="detail-date">Posted: {{ listing.created_at.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        &copy; 2025 FreeFits - Free Clothing Marketplace
+    </footer>
+</body>
+</html>
+
