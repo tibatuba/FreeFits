@@ -13,22 +13,7 @@ body {
     position: relative;
 }
 
-/* Sloth mascot background */
-body::before {
-    content: '🦥';
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    font-size: 3rem;
-    z-index: 1000;
-    animation: slothSway 4s ease-in-out infinite;
-    pointer-events: none;
-}
-
-@keyframes slothSway {
-    0%, 100% { transform: rotate(-5deg); }
-    50% { transform: rotate(5deg); }
-}
+/* Sloth mascot removed from body::before - now in footer */
 
 /* Header styles */
 header {
@@ -38,6 +23,8 @@ header {
     padding: 1.5rem;
     text-align: center;
     box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+    position: relative;
+    z-index: 1001;
 }
 
 header h1 {
@@ -232,6 +219,18 @@ footer {
     font-size: 0.9rem;
 }
 
+.footer-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.sloth-emoji {
+    font-size: 2rem;
+    display: inline-block;
+}
+
 /* Marketplace specific styles */
 .marketplace {
     max-width: 1200px;
@@ -396,6 +395,12 @@ footer {
     margin-bottom: 2rem;
     padding-bottom: 1rem;
     border-bottom: 2px solid #f0f0f0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
 }
 
 .results-count {

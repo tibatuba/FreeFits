@@ -13,6 +13,7 @@
             <nav class="user-nav">
                 {% if username %}
                     <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.my_listings') }}" class="nav-link">My Listings</a>
                     <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
                 {% else %}
                     <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
@@ -41,7 +42,7 @@
 
             <form action="{{ url_for('main.create_listing_page') }}" method="POST" class="create-form">
                 <label for="title">Title *</label>
-                <input type="text" id="title" name="title" placeholder="e.g., 🌿 Organic Cotton T-Shirt" required>
+                <input type="text" id="title" name="title" placeholder="e.g., Organic Cotton T-Shirt" required>
 
                 <label for="description">Description *</label>
                 <textarea id="description" name="description" rows="5" placeholder="Describe your item in detail..." required></textarea>
@@ -74,7 +75,7 @@
                 <input type="text" id="location" name="location" placeholder="e.g., Toronto, ON" required>
 
                 <div class="form-actions">
-                    <button type="submit" class="submit-btn">🌿 Create Listing</button>
+                    <button type="submit" class="submit-btn">Create Listing</button>
                     <a href="{{ url_for('main.home') }}" class="cancel-btn">Cancel</a>
                 </div>
             </form>
@@ -82,7 +83,10 @@
     </main>
 
     <footer>
-        &copy; 2025 FreeFits - Free Clothing Marketplace
+        <div class="footer-content">
+            <span class="sloth-emoji">🦥</span>
+            <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
+        </div>
     </footer>
 </body>
 </html>

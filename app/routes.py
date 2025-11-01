@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing
+from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, get_listings_by_user
 
 main = Blueprint("main", __name__)
 
@@ -148,3 +148,18 @@ def contact_seller(listing_id):
     # For now, just show a message (you can implement actual messaging later)
     flash(f"Message sent to seller for '{listing.title}'! (This is a demo - messaging will be implemented later)", "success")
     return redirect(url_for("main.view_listing", listing_id=listing_id))
+
+# My Listings route (requires authentication)
+@main.route("/my-listings")
+def my_listings():
+    username = session.get("username")
+    
+    # Require authentication to view my listings
+    if not username:
+        flash("Please log in to view your listings.", "error")
+        return redirect(url_for("main.login"))
+    
+    # Get all listings created by this user
+    user_listings = get_listings_by_user(username)
+    
+    return render_template("my_listings.html", username=username, listings=user_listings)

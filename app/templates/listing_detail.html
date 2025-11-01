@@ -13,6 +13,7 @@
             <nav class="user-nav">
                 {% if username %}
                     <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.my_listings') }}" class="nav-link">My Listings</a>
                     <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
                 {% else %}
                     <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
@@ -46,7 +47,6 @@
                 <div class="detail-info-section">
                     <div class="detail-header">
                         <h2 class="detail-title">{{ listing.title }}</h2>
-                        <span class="free-badge">FREE</span>
                     </div>
 
                     <div class="detail-meta">
@@ -85,7 +85,10 @@
     </main>
 
     <footer>
-        &copy; 2025 FreeFits - Free Clothing Marketplace
+        <div class="footer-content">
+            <span class="sloth-emoji">🦥</span>
+            <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
+        </div>
     </footer>
 </body>
 </html>

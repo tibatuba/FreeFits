@@ -18,7 +18,7 @@ class Listing:
 sample_listings = [
     Listing(
         id=1,
-        title="🌿 Organic Cotton T-Shirt",
+        title="Organic Cotton T-Shirt",
         description="100% organic cotton t-shirt in forest green. Gently worn, perfect for eco-conscious fashion!",
         category="Tops",
         size="M",
@@ -28,7 +28,7 @@ sample_listings = [
     ),
     Listing(
         id=2,
-        title="🦥 Vintage Denim Jacket",
+        title="Vintage Denim Jacket",
         description="Classic denim jacket with a sloth patch! Perfect for sustainable fashion lovers.",
         category="Jackets",
         size="M",
@@ -38,7 +38,7 @@ sample_listings = [
     ),
     Listing(
         id=3,
-        title="🌱 Bamboo Fiber Dress",
+        title="Bamboo Fiber Dress",
         description="Beautiful sustainable bamboo fiber dress. Soft, breathable, and eco-friendly!",
         category="Dresses",
         size="S",
@@ -48,7 +48,7 @@ sample_listings = [
     ),
     Listing(
         id=4,
-        title="🌿 Hand-Knit Wool Sweater",
+        title="Hand-Knit Wool Sweater",
         description="Cozy hand-knit sweater made from recycled wool. One-of-a-kind sustainable piece!",
         category="Sweaters",
         size="L",
@@ -58,7 +58,7 @@ sample_listings = [
     ),
     Listing(
         id=5,
-        title="🦥 Sloth Print Tote Bag",
+        title="Sloth Print Tote Bag",
         description="Cute canvas tote bag with sloth print. Perfect for grocery shopping and reducing plastic waste!",
         category="Accessories",
         size="One Size",
@@ -68,7 +68,7 @@ sample_listings = [
     ),
     Listing(
         id=6,
-        title="🌱 Hemp Yoga Pants",
+        title="Hemp Yoga Pants",
         description="Comfortable hemp fiber yoga pants. Sustainable and perfect for eco-friendly workouts!",
         category="Pants",
         size="M",
@@ -109,6 +109,11 @@ def get_listing_by_id(listing_id):
         if listing.id == listing_id:
             return listing
     return None
+
+def get_listings_by_user(user_id):
+    """Get all listings created by a specific user"""
+    user_listings = [listing for listing in sample_listings if listing.user_id == user_id]
+    return sorted(user_listings, key=lambda x: x.created_at, reverse=True)
 
 def create_listing(title, description, category, size, condition, location, user_id):
     """Create a new listing and add it to sample_listings"""

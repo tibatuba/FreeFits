@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Listings - FreeFits</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1><a href="{{ url_for('main.home') }}" style="text-decoration: none; color: inherit;">FreeFits</a></h1>
+            <nav class="user-nav">
+                {% if username %}
+                    <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
+                    <a href="{{ url_for('main.register') }}" class="nav-link">Register</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="marketplace">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- My Listings Section -->
+        <div class="results-section">
+            <div class="results-header">
+                <h2>My Listings</h2>
+                <div class="header-actions">
+                    <a href="{{ url_for('main.home') }}" class="nav-link">Browse Marketplace</a>
+                    <a href="{{ url_for('main.create_listing_page') }}" class="post-listing-btn">+ Post New Item</a>
+                </div>
+            </div>
+
+            {% if listings %}
+                <div class="results-count">{{ listings|length }} item{{ 's' if listings|length != 1 else '' }} listed</div>
+                <div class="listings-grid">
+                    {% for listing in listings %}
+                    <a href="{{ url_for('main.view_listing', listing_id=listing.id) }}" class="listing-card-link">
+                        <div class="listing-card">
+                            <div class="listing-image">
+                                <div class="placeholder-image">📷</div>
+                            </div>
+                            <div class="listing-content">
+                                <h3 class="listing-title">{{ listing.title }}</h3>
+                                <p class="listing-description">{{ listing.description }}</p>
+                                <div class="listing-details">
+                                    <span class="category">{{ listing.category }}</span>
+                                    <span class="size">Size: {{ listing.size }}</span>
+                                    <span class="condition">{{ listing.condition }}</span>
+                                </div>
+                                <div class="listing-location">
+                                    📍 {{ listing.location }}
+                                </div>
+                                <div class="listing-actions">
+                                    <span class="view-details-btn">View Details →</span>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="no-results">
+                    <h3>You haven't posted any listings yet</h3>
+                    <p>Start sharing your sustainable clothing with the community!</p>
+                    <a href="{{ url_for('main.create_listing_page') }}" class="post-listing-btn" style="display: inline-block; margin-top: 1rem;">+ Post Your First Item</a>
+                </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <span class="sloth-emoji">🦥</span>
+            <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
+        </div>
+    </footer>
+</body>
+</html>
+
