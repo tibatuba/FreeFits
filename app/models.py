@@ -1,7 +1,8 @@
 from datetime import datetime
+from bson import ObjectId
 
 class Listing:
-    def __init__(self, id, title, description, category, size, condition, location, user_id, created_at=None):
+    def __init__(self, id, title, description, category, size, condition, location, user_id, created_at=None, images=None, is_available=True):
         self.id = id
         self.title = title
         self.description = description
@@ -10,126 +11,140 @@ class Listing:
         self.condition = condition
         self.location = location
         self.user_id = user_id
-        self.created_at = created_at or datetime.now()
-        self.images = []
-        self.is_available = True
+        self.created_at = created_at if isinstance(created_at, datetime) else (created_at or datetime.now())
+        self.images = images or []
+        self.is_available = is_available
+    
+    @classmethod
+    def from_dict(cls, doc):
+        """Create a Listing object from a MongoDB document"""
+        return cls(
+            id=str(doc.get('_id', '')),
+            title=doc.get('title', ''),
+            description=doc.get('description', ''),
+            category=doc.get('category', ''),
+            size=doc.get('size', ''),
+            condition=doc.get('condition', ''),
+            location=doc.get('location', ''),
+            user_id=doc.get('user_id', ''),
+            created_at=doc.get('created_at', datetime.now()),
+            images=doc.get('images', []),
+            is_available=doc.get('is_available', True)
+        )
+    
+    def to_dict(self):
+        """Convert Listing object to dictionary for MongoDB"""
+        return {
+            'title': self.title,
+            'description': self.description,
+            'category': self.category,
+            'size': self.size,
+            'condition': self.condition,
+            'location': self.location,
+            'user_id': self.user_id,
+            'created_at': self.created_at,
+            'images': self.images,
+            'is_available': self.is_available
+        }
 
-# Sample data for demonstration (will be replaced with MongoDB later)
-sample_listings = [
-    Listing(
-        id=1,
-        title="Organic Cotton T-Shirt",
-        description="100% organic cotton t-shirt in forest green. Gently worn, perfect for eco-conscious fashion!",
-        category="Tops",
-        size="M",
-        condition="Excellent",
-        location="Toronto, ON",
-        user_id="user1"
-    ),
-    Listing(
-        id=2,
-        title="Vintage Denim Jacket",
-        description="Classic denim jacket with a sloth patch! Perfect for sustainable fashion lovers.",
-        category="Jackets",
-        size="M",
-        condition="Good",
-        location="Toronto, ON",
-        user_id="user2"
-    ),
-    Listing(
-        id=3,
-        title="Bamboo Fiber Dress",
-        description="Beautiful sustainable bamboo fiber dress. Soft, breathable, and eco-friendly!",
-        category="Dresses",
-        size="S",
-        condition="Like New",
-        location="Toronto, ON",
-        user_id="user3"
-    ),
-    Listing(
-        id=4,
-        title="Hand-Knit Wool Sweater",
-        description="Cozy hand-knit sweater made from recycled wool. One-of-a-kind sustainable piece!",
-        category="Sweaters",
-        size="L",
-        condition="Good",
-        location="Toronto, ON",
-        user_id="user1"
-    ),
-    Listing(
-        id=5,
-        title="Sloth Print Tote Bag",
-        description="Cute canvas tote bag with sloth print. Perfect for grocery shopping and reducing plastic waste!",
-        category="Accessories",
-        size="One Size",
-        condition="Excellent",
-        location="Toronto, ON",
-        user_id="user2"
-    ),
-    Listing(
-        id=6,
-        title="Hemp Yoga Pants",
-        description="Comfortable hemp fiber yoga pants. Sustainable and perfect for eco-friendly workouts!",
-        category="Pants",
-        size="M",
-        condition="Good",
-        location="Toronto, ON",
-        user_id="user3"
-    )
-]
+def get_listings_collection(db):
+    """Get the listings collection from MongoDB"""
+    if db is None:
+        return None
+    return db["listings"]
 
-def get_latest_listings(limit=20):
-    """Get the latest listings, sorted by creation date"""
-    return sorted(sample_listings, key=lambda x: x.created_at, reverse=True)[:limit]
+def get_latest_listings(db, limit=20):
+    """Get the latest listings from MongoDB, sorted by creation date"""
+    collection = get_listings_collection(db)
+    if collection is None:
+        return []
+    
+    cursor = collection.find({"is_available": True}).sort("created_at", -1).limit(limit)
+    return [Listing.from_dict(doc) for doc in cursor]
 
-def search_listings(query, category=None, location=None, max_distance=None):
-    """Search listings based on query and filters"""
-    results = sample_listings.copy()
+def search_listings(db, query=None, category=None, location=None, max_distance=None):
+    """Search listings in MongoDB based on query and filters"""
+    collection = get_listings_collection(db)
+    if collection is None:
+        return []
+    
+    # Build MongoDB query
+    mongo_query = {"is_available": True}
     
     # Filter by search query
     if query:
-        query_lower = query.lower()
-        results = [listing for listing in results 
-                  if query_lower in listing.title.lower() or 
-                     query_lower in listing.description.lower()]
+        mongo_query["$or"] = [
+            {"title": {"$regex": query, "$options": "i"}},
+            {"description": {"$regex": query, "$options": "i"}}
+        ]
     
     # Filter by category
     if category:
-        results = [listing for listing in results if listing.category == category]
+        mongo_query["category"] = category
     
     # Filter by location (simplified for demo - will use proper geolocation later)
     if location:
-        results = [listing for listing in results if location.lower() in listing.location.lower()]
+        mongo_query["location"] = {"$regex": location, "$options": "i"}
     
-    return sorted(results, key=lambda x: x.created_at, reverse=True)
+    cursor = collection.find(mongo_query).sort("created_at", -1)
+    return [Listing.from_dict(doc) for doc in cursor]
 
-def get_listing_by_id(listing_id):
-    """Get a listing by its ID"""
-    for listing in sample_listings:
-        if listing.id == listing_id:
-            return listing
+def get_listing_by_id(db, listing_id):
+    """Get a listing by its ID from MongoDB"""
+    collection = get_listings_collection(db)
+    if collection is None:
+        return None
+    
+    try:
+        doc = collection.find_one({"_id": ObjectId(listing_id)})
+        if doc:
+            return Listing.from_dict(doc)
+    except:
+        pass
+    
     return None
 
-def get_listings_by_user(user_id):
-    """Get all listings created by a specific user"""
-    user_listings = [listing for listing in sample_listings if listing.user_id == user_id]
-    return sorted(user_listings, key=lambda x: x.created_at, reverse=True)
+def get_listings_by_user(db, user_id):
+    """Get all listings created by a specific user from MongoDB"""
+    collection = get_listings_collection(db)
+    if collection is None:
+        return []
+    
+    cursor = collection.find({"user_id": user_id}).sort("created_at", -1)
+    return [Listing.from_dict(doc) for doc in cursor]
 
-def create_listing(title, description, category, size, condition, location, user_id):
-    """Create a new listing and add it to sample_listings"""
-    # Get the next available ID
-    next_id = max([listing.id for listing in sample_listings], default=0) + 1
+def create_listing(db, title, description, category, size, condition, location, user_id, image_filename=None):
+    """Create a new listing and save it to MongoDB"""
+    collection = get_listings_collection(db)
+    if collection is None:
+        # Fallback: return a Listing object without saving (for demo)
+        return Listing(
+            id="demo",
+            title=title,
+            description=description,
+            category=category,
+            size=size,
+            condition=condition,
+            location=location,
+            user_id=user_id,
+            images=[image_filename] if image_filename else []
+        )
     
     new_listing = Listing(
-        id=next_id,
+        id="",  # Will be set after insert
         title=title,
         description=description,
         category=category,
         size=size,
         condition=condition,
         location=location,
-        user_id=user_id
+        user_id=user_id,
+        images=[image_filename] if image_filename else [],
+        created_at=datetime.utcnow()
     )
     
-    sample_listings.append(new_listing)
+    # Insert into MongoDB
+    result = collection.insert_one(new_listing.to_dict())
+    new_listing.id = str(result.inserted_id)
+    
     return new_listing

@@ -1,6 +1,8 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from datetime import datetime
+import os
 from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, get_listings_by_user
 
 main = Blueprint("main", __name__)
@@ -9,6 +11,7 @@ main = Blueprint("main", __name__)
 @main.route("/")
 def home():
     username = session.get("username")  # None if not logged in
+    db = getattr(current_app, "mongo_db", None)
     
     # Get search parameters
     search_query = request.args.get('search', '')
@@ -19,12 +22,13 @@ def home():
     # Get listings based on search/filters
     if search_query or location_filter or category_filter:
         listings = search_listings(
-            query=search_query,
+            db,
+            query=search_query if search_query else None,
             category=category_filter if category_filter else None,
             location=location_filter if location_filter else None
         )
     else:
-        listings = get_latest_listings()
+        listings = get_latest_listings(db)
     
     return render_template("home.html", 
                          username=username, 
@@ -83,8 +87,9 @@ def register():
         if password != confirm_password:
             return render_template("register.html", error="Passwords do not match.")
         
-        if len(password) < 6:
-            return render_template("register.html", error="Password must be at least 6 characters long.")
+        
+        if len(password) < 8:
+            return render_template("register.html", error="Password must be at least 8 characters long.")
 
         db = getattr(current_app, "mongo_db", None)
         if db is None:
@@ -113,10 +118,11 @@ def register():
     return render_template("register.html")
 
 # View individual listing route
-@main.route("/listing/<int:listing_id>")
+@main.route("/listing/<listing_id>")
 def view_listing(listing_id):
     username = session.get("username")
-    listing = get_listing_by_id(listing_id)
+    db = getattr(current_app, "mongo_db", None)
+    listing = get_listing_by_id(db, listing_id)
     
     if not listing:
         flash("Listing not found.", "error")
@@ -141,6 +147,7 @@ def create_listing_page():
         size = request.form.get("size")
         condition = request.form.get("condition")
         location = request.form.get("location")
+        image_file = request.files.get("image")
         
         # Basic validation
         if not all([title, description, category, size, condition, location]):
@@ -148,15 +155,43 @@ def create_listing_page():
                                  username=username,
                                  error="All fields are required.")
         
+        # Validate image
+        if not image_file or image_file.filename == '':
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error="Please upload an image.")
+        
+        # Check if file is an image
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        file_ext = image_file.filename.rsplit('.', 1)[1].lower() if '.' in image_file.filename else ''
+        if file_ext not in allowed_extensions:
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error="Invalid image format. Please upload JPG, PNG, GIF, or WEBP.")
+        
+        # Save image file
+        upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = secure_filename(image_file.filename)
+        filename = f"{timestamp}_{filename}"
+        filepath = os.path.join(upload_folder, filename)
+        image_file.save(filepath)
+        
         # Create the listing
+        db = getattr(current_app, "mongo_db", None)
         new_listing = create_listing(
+            db,
             title=title,
             description=description,
             category=category,
             size=size,
             condition=condition,
             location=location,
-            user_id=username
+            user_id=username,
+            image_filename=filename
         )
         
         flash("Listing created successfully!", "success")
@@ -165,16 +200,17 @@ def create_listing_page():
     return render_template("create_listing.html", username=username)
 
 # Contact/Message seller route (requires authentication)
-@main.route("/listing/<int:listing_id>/contact", methods=["POST"])
+@main.route("/listing/<listing_id>/contact", methods=["POST"])
 def contact_seller(listing_id):
     username = session.get("username")
+    db = getattr(current_app, "mongo_db", None)
     
     # Require authentication to contact seller
     if not username:
         flash("Please log in to contact the seller.", "error")
         return redirect(url_for("main.login"))
     
-    listing = get_listing_by_id(listing_id)
+    listing = get_listing_by_id(db, listing_id)
     if not listing:
         flash("Listing not found.", "error")
         return redirect(url_for("main.home"))
@@ -194,6 +230,12 @@ def my_listings():
         return redirect(url_for("main.login"))
     
     # Get all listings created by this user
-    user_listings = get_listings_by_user(username)
+    db = getattr(current_app, "mongo_db", None)
+    user_listings = get_listings_by_user(db, username)
     
     return render_template("my_listings.html", username=username, listings=user_listings)
+
+# Serve uploaded images
+@main.route("/uploads/<filename>")
+def uploaded_file(filename):
+    return send_from_directory(os.path.join(current_app.root_path, 'static', 'img', 'uploads'), filename)

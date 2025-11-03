@@ -33,6 +33,13 @@ def create_app():
             users.create_index("username", unique=True)
             users.create_index("email", unique=True)
             
+            # Ensure indexes for listings
+            listings = db["listings"]
+            listings.create_index("user_id")
+            listings.create_index("category")
+            listings.create_index("created_at")
+            listings.create_index([("title", "text"), ("description", "text")])  # Text search index
+            
             print("MongoDB connected successfully!")
         except Exception as e:
             print(f"MongoDB connection error: {e}")

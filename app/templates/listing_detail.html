@@ -40,7 +40,11 @@
             <div class="detail-content">
                 <div class="detail-image-section">
                     <div class="detail-image">
-                        <div class="placeholder-image">📷</div>
+                        {% if listing.images and listing.images|length > 0 %}
+                            <img src="{{ url_for('main.uploaded_file', filename=listing.images[0]) }}" alt="{{ listing.title }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 16px;">
+                        {% else %}
+                            <div class="placeholder-image">📷</div>
+                        {% endif %}
                     </div>
                 </div>
 
