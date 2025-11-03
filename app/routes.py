@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
 from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, get_listings_by_user
 
 main = Blueprint("main", __name__)
@@ -39,10 +41,22 @@ def login():
         username = request.form.get("username")
         password = request.form.get("password")
 
-        # For demo: accept any username/password (you can add real validation later)
-        if username and password:
-            session["username"] = username  # Save username in session
+        if not username or not password:
+            return render_template("login.html", error="Username and password are required.")
+
+        # Verify against MongoDB if configured
+        db = getattr(current_app, "mongo_db", None)
+        if db is None:
+            # Fallback: simple session login (no DB configured)
+            session["username"] = username
             return redirect(url_for("main.home"))
+
+        user = db["users"].find_one({"username": username})
+        if not user or not check_password_hash(user.get("password_hash", ""), password):
+            return render_template("login.html", error="Invalid username or password.")
+
+        session["username"] = username
+        return redirect(url_for("main.home"))
 
     return render_template("login.html")
 
@@ -72,8 +86,28 @@ def register():
         if len(password) < 6:
             return render_template("register.html", error="Password must be at least 6 characters long.")
 
-        # For demo: accept any valid registration (you can add real validation later)
-        session["username"] = username  # Save username in session
+        db = getattr(current_app, "mongo_db", None)
+        if db is None:
+            # Fallback if DB not configured
+            session["username"] = username
+            return redirect(url_for("main.home"))
+
+        users = db["users"]
+        # Check if username or email already exists
+        existing = users.find_one({"$or": [{"username": username}, {"email": email}]})
+        if existing:
+            return render_template("register.html", error="Username or email already exists.")
+
+        password_hash = generate_password_hash(password)
+        users.insert_one({
+            "username": username,
+            "email": email,
+            "password_hash": password_hash,
+            "location": location,
+            "created_at": datetime.utcnow()
+        })
+
+        session["username"] = username
         return redirect(url_for("main.home"))
 
     return render_template("register.html")
