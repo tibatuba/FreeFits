@@ -1,137 +1,40 @@
 from datetime import datetime
-from bson import ObjectId
+from types import SimpleNamespace
+from typing import List, Optional
 
-class Listing:
-    def __init__(self, id, title, description, category, size, condition, location, user_id, created_at=None, images=None, is_available=True):
-        self.id = id
-        self.title = title
-        self.description = description
-        self.category = category
-        self.size = size
-        self.condition = condition
-        self.location = location
-        self.user_id = user_id
-        self.created_at = created_at if isinstance(created_at, datetime) else (created_at or datetime.now())
-        self.images = images or []
-        self.is_available = is_available
-    
-    @classmethod
-    def from_dict(cls, doc):
-        """Create a Listing object from a MongoDB document"""
-        return cls(
-            id=str(doc.get('_id', '')),
-            title=doc.get('title', ''),
-            description=doc.get('description', ''),
-            category=doc.get('category', ''),
-            size=doc.get('size', ''),
-            condition=doc.get('condition', ''),
-            location=doc.get('location', ''),
-            user_id=doc.get('user_id', ''),
-            created_at=doc.get('created_at', datetime.now()),
-            images=doc.get('images', []),
-            is_available=doc.get('is_available', True)
-        )
-    
-    def to_dict(self):
-        """Convert Listing object to dictionary for MongoDB"""
-        return {
-            'title': self.title,
-            'description': self.description,
-            'category': self.category,
-            'size': self.size,
-            'condition': self.condition,
-            'location': self.location,
-            'user_id': self.user_id,
-            'created_at': self.created_at,
-            'images': self.images,
-            'is_available': self.is_available
-        }
 
-def get_listings_collection(db):
-    """Get the listings collection from MongoDB"""
-    if db is None:
-        return None
-    return db["listings"]
+# -----------------------------
+# In-memory "database" fallback
+# -----------------------------
+_IN_MEMORY_LISTINGS: List[SimpleNamespace] = []
+_NEXT_ID = 1
 
-def get_latest_listings(db, limit=20):
-    """Get the latest listings from MongoDB, sorted by creation date"""
-    collection = get_listings_collection(db)
-    if collection is None:
-        return []
-    
-    cursor = collection.find({"is_available": True}).sort("created_at", -1).limit(limit)
-    return [Listing.from_dict(doc) for doc in cursor]
 
-def search_listings(db, query=None, category=None, location=None, max_distance=None):
-    """Search listings in MongoDB based on query and filters"""
-    collection = get_listings_collection(db)
-    if collection is None:
-        return []
-    
-    # Build MongoDB query
-    mongo_query = {"is_available": True}
-    
-    # Filter by search query
-    if query:
-        mongo_query["$or"] = [
-            {"title": {"$regex": query, "$options": "i"}},
-            {"description": {"$regex": query, "$options": "i"}}
-        ]
-    
-    # Filter by category
-    if category:
-        mongo_query["category"] = category
-    
-    # Filter by location (simplified for demo - will use proper geolocation later)
-    if location:
-        mongo_query["location"] = {"$regex": location, "$options": "i"}
-    
-    cursor = collection.find(mongo_query).sort("created_at", -1)
-    return [Listing.from_dict(doc) for doc in cursor]
+def _use_in_memory(db) -> bool:
+    """
+    Decide whether to use the in-memory store.
+    If db is None (no Mongo configured), we use in-memory.
+    """
+    return db is None
 
-def get_listing_by_id(db, listing_id):
-    """Get a listing by its ID from MongoDB"""
-    collection = get_listings_collection(db)
-    if collection is None:
-        return None
-    
-    try:
-        doc = collection.find_one({"_id": ObjectId(listing_id)})
-        if doc:
-            return Listing.from_dict(doc)
-    except:
-        pass
-    
-    return None
 
-def get_listings_by_user(db, user_id):
-    """Get all listings created by a specific user from MongoDB"""
-    collection = get_listings_collection(db)
-    if collection is None:
-        return []
-    
-    cursor = collection.find({"user_id": user_id}).sort("created_at", -1)
-    return [Listing.from_dict(doc) for doc in cursor]
-
-def create_listing(db, title, description, category, size, condition, location, user_id, image_filename=None):
-    """Create a new listing and save it to MongoDB"""
-    collection = get_listings_collection(db)
-    if collection is None:
-        # Fallback: return a Listing object without saving (for demo)
-        return Listing(
-            id="demo",
-            title=title,
-            description=description,
-            category=category,
-            size=size,
-            condition=condition,
-            location=location,
-            user_id=user_id,
-            images=[image_filename] if image_filename else []
-        )
-    
-    new_listing = Listing(
-        id="",  # Will be set after insert
+def _create_listing_object(
+    listing_id: str,
+    title: str,
+    description: str,
+    category: str,
+    size: str,
+    condition: str,
+    location: str,
+    user_id: str,
+    image_filename: str,
+    created_at: Optional[datetime] = None,
+):
+    """
+    Helper to build a listing object with attribute-style access.
+    """
+    return SimpleNamespace(
+        id=listing_id,
         title=title,
         description=description,
         category=category,
@@ -139,12 +42,238 @@ def create_listing(db, title, description, category, size, condition, location, 
         condition=condition,
         location=location,
         user_id=user_id,
-        images=[image_filename] if image_filename else [],
-        created_at=datetime.utcnow()
+        image_filename=image_filename,
+        created_at=created_at or datetime.utcnow(),
+        is_available=True,
     )
-    
-    # Insert into MongoDB
-    result = collection.insert_one(new_listing.to_dict())
-    new_listing.id = str(result.inserted_id)
-    
-    return new_listing
+
+
+# -----------------------------
+# Public API used by routes.py
+# -----------------------------
+
+def create_listing(
+    db,
+    title: str,
+    description: str,
+    category: str,
+    size: str,
+    condition: str,
+    location: str,
+    user_id: str,
+    image_filename: str,
+):
+    """
+    Create a new listing.
+
+    If a MongoDB database (db) is provided, this function can be extended
+    to insert into the real 'listings' collection. For the Architectural
+    Release iteration, when db is None, we use an in-memory store so that
+    the Create Listing + View Listing use-cases work end-to-end.
+    """
+    global _NEXT_ID
+
+    # In-memory mode (current iteration)
+    if _use_in_memory(db):
+        listing_id = str(_NEXT_ID)
+        _NEXT_ID += 1
+
+        listing = _create_listing_object(
+            listing_id=listing_id,
+            title=title,
+            description=description,
+            category=category,
+            size=size,
+            condition=condition,
+            location=location,
+            user_id=user_id,
+            image_filename=image_filename,
+        )
+
+        _IN_MEMORY_LISTINGS.append(listing)
+        return listing
+
+    # -----------------------------
+    # Future: MongoDB implementation
+    # -----------------------------
+    # Example (pseudo-code):
+    #
+    # collection = db["listings"]
+    # doc = {
+    #     "title": title,
+    #     "description": description,
+    #     "category": category,
+    #     "size": size,
+    #     "condition": condition,
+    #     "location": location,
+    #     "user_id": user_id,
+    #     "image_filename": image_filename,
+    #     "created_at": datetime.utcnow(),
+    #     "is_available": True,
+    # }
+    # result = collection.insert_one(doc)
+    # listing_id = str(result.inserted_id)
+    # return _create_listing_object(listing_id=listing_id, **doc)
+    #
+    raise RuntimeError("MongoDB path not implemented yet")
+
+
+def get_latest_listings(db, limit: int = 20):
+    """
+    Return the most recent listings.
+
+    In-memory mode: sort by created_at descending.
+    """
+    if _use_in_memory(db):
+        return sorted(
+            _IN_MEMORY_LISTINGS,
+            key=lambda l: l.created_at,
+            reverse=True,
+        )[:limit]
+
+    # Future: MongoDB implementation
+    #
+    # collection = db["listings"]
+    # docs = collection.find({"is_available": True}).sort("created_at", -1).limit(limit)
+    # return [
+    #     _create_listing_object(
+    #         listing_id=str(doc["_id"]),
+    #         title=doc["title"],
+    #         description=doc["description"],
+    #         category=doc["category"],
+    #         size=doc["size"],
+    #         condition=doc["condition"],
+    #         location=doc["location"],
+    #         user_id=doc["user_id"],
+    #         image_filename=doc["image_filename"],
+    #         created_at=doc.get("created_at"),
+    #     )
+    #     for doc in docs
+    # ]
+    #
+    raise RuntimeError("MongoDB path not implemented yet")
+
+
+def get_listing_by_id(db, listing_id: str):
+    """
+    Return a single listing by id, or None if not found.
+    """
+    if _use_in_memory(db):
+        for l in _IN_MEMORY_LISTINGS:
+            if l.id == str(listing_id):
+                return l
+        return None
+
+    # Future: MongoDB implementation
+    #
+    # from bson.objectid import ObjectId
+    # collection = db["listings"]
+    # try:
+    #     doc = collection.find_one({"_id": ObjectId(listing_id)})
+    # except Exception:
+    #     doc = None
+    # if not doc:
+    #     return None
+    # return _create_listing_object(
+    #     listing_id=str(doc["_id"]),
+    #     title=doc["title"],
+    #     description=doc["description"],
+    #     category=doc["category"],
+    #     size=doc["size"],
+    #     condition=doc["condition"],
+    #     location=doc["location"],
+    #     user_id=doc["user_id"],
+    #     image_filename=doc["image_filename"],
+    #     created_at=doc.get("created_at"),
+    # )
+    #
+    raise RuntimeError("MongoDB path not implemented yet")
+
+
+def search_listings(db, query=None, category=None, location=None, max_distance=None):
+    """
+    Search listings by text + filters.
+    """
+    if _use_in_memory(db):
+        results = _IN_MEMORY_LISTINGS
+
+        if query:
+            q = query.lower()
+            results = [
+                l
+                for l in results
+                if q in l.title.lower() or q in l.description.lower()
+            ]
+
+        if category:
+            results = [l for l in results if l.category == category]
+
+        if location:
+            results = [l for l in results if l.location == location]
+
+        # max_distance ignored in in-memory mode (no geo)
+        return results
+
+    # Future: MongoDB implementation
+    #
+    # collection = db["listings"]
+    # mongo_query = {"is_available": True}
+    #
+    # if query:
+    #     mongo_query["$or"] = [
+    #         {"title": {"$regex": query, "$options": "i"}},
+    #         {"description": {"$regex": query, "$options": "i"}},
+    #     ]
+    # if category:
+    #     mongo_query["category"] = category
+    # if location:
+    #     mongo_query["location"] = {"$regex": location, "$options": "i"}
+    #
+    # docs = collection.find(mongo_query).sort("created_at", -1)
+    # return [
+    #     _create_listing_object(
+    #         listing_id=str(doc["_id"]),
+    #         title=doc["title"],
+    #         description=doc["description"],
+    #         category=doc["category"],
+    #         size=doc["size"],
+    #         condition=doc["condition"],
+    #         location=doc["location"],
+    #         user_id=doc["user_id"],
+    #         image_filename=doc["image_filename"],
+    #         created_at=doc.get("created_at"),
+    #     )
+    #     for doc in docs
+    # ]
+    #
+    raise RuntimeError("MongoDB path not implemented yet")
+
+
+def get_listings_by_user(db, username: str):
+    """
+    Return all listings created by the given username.
+    """
+    if _use_in_memory(db):
+        return [l for l in _IN_MEMORY_LISTINGS if l.user_id == username]
+
+    # Future: MongoDB implementation
+    #
+    # collection = db["listings"]
+    # docs = collection.find({"user_id": username, "is_available": True}).sort("created_at", -1)
+    # return [
+    #     _create_listing_object(
+    #         listing_id=str(doc["_id"]),
+    #         title=doc["title"],
+    #         description=doc["description"],
+    #         category=doc["category"],
+    #         size=doc["size"],
+    #         condition=doc["condition"],
+    #         location=doc["location"],
+    #         user_id=doc["user_id"],
+    #         image_filename=doc["image_filename"],
+    #         created_at=doc.get("created_at"),
+    #     )
+    #     for doc in docs
+    # ]
+    #
+    raise RuntimeError("MongoDB path not implemented yet")
