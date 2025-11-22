@@ -32,8 +32,9 @@
             <label for="confirm_password">Confirm Password:</label>
             <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm your password" required>
 
-            <label for="location">Location (City, State):</label>
-            <input type="text" id="location" name="location" placeholder="e.g., Toronto, ON" required>
+            <label for="location">Location (City, Country):</label>
+            <input type="text" id="location" name="location" placeholder="Start typing city name..." required autocomplete="off">
+            <div id="location-suggestions" class="location-suggestions"></div>
 
             <div class="wrap">
                 <button type="submit">Create Account</button>
@@ -43,6 +44,10 @@
         <p>Already have an account?
             <a href="{{ url_for('main.login') }}" style="text-decoration: none;">Sign in here</a>
         </p>
+        
+        <p style="text-align: center; margin-top: 1.5rem;">
+            <a href="{{ url_for('main.home') }}" style="text-decoration: none; color: #2d5a2d; font-weight: 500;">← Back to Home</a>
+        </p>
     </main>
 
     <footer>
@@ -51,5 +56,166 @@
             <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
         </div>
     </footer>
+
+    <script>
+        // City/Country Autocomplete using Geonames API
+        (function() {
+            const locationInput = document.getElementById('location');
+            const suggestionsDiv = document.getElementById('location-suggestions');
+            let debounceTimer;
+            let currentSuggestions = [];
+
+            // Geonames API - using demo username (for production, sign up at geonames.org)
+            const GEONAMES_USERNAME = 'demo'; // Replace with your username for production
+
+            locationInput.addEventListener('input', function() {
+                const query = this.value.trim();
+                
+                clearTimeout(debounceTimer);
+                
+                if (query.length < 2) {
+                    suggestionsDiv.classList.remove('show');
+                    return;
+                }
+
+                debounceTimer = setTimeout(() => {
+                    searchCities(query);
+                }, 300);
+            });
+
+            locationInput.addEventListener('focus', function() {
+                if (this.value.trim().length >= 2 && currentSuggestions.length > 0) {
+                    suggestionsDiv.classList.add('show');
+                }
+            });
+
+            function searchCities(query) {
+                // Geonames API endpoint for city search
+                const url = `https://secure.geonames.org/searchJSON?name_startsWith=${encodeURIComponent(query)}&maxRows=10&username=${GEONAMES_USERNAME}&featureClass=P&orderby=population`;
+                
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.geonames && data.geonames.length > 0) {
+                            currentSuggestions = data.geonames;
+                            displaySuggestions(data.geonames);
+                        } else {
+                            suggestionsDiv.classList.remove('show');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching cities:', error);
+                        // Fallback: show some common cities
+                        showFallbackSuggestions(query);
+                    });
+            }
+
+            function displaySuggestions(cities) {
+                suggestionsDiv.innerHTML = '';
+                
+                cities.forEach((city, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'location-suggestion';
+                    // Format: "City, Country"
+                    const displayText = `${city.name}, ${city.countryName}`;
+                    div.textContent = displayText;
+                    div.dataset.city = city.name;
+                    div.dataset.country = city.countryName;
+                    div.dataset.full = displayText;
+                    
+                    div.addEventListener('click', function() {
+                        locationInput.value = this.dataset.full;
+                        suggestionsDiv.classList.remove('show');
+                    });
+                    
+                    div.addEventListener('mouseenter', function() {
+                        document.querySelectorAll('.location-suggestion').forEach(s => {
+                            s.classList.remove('selected');
+                        });
+                        this.classList.add('selected');
+                    });
+                    
+                    suggestionsDiv.appendChild(div);
+                });
+                
+                suggestionsDiv.classList.add('show');
+            }
+
+            function showFallbackSuggestions(query) {
+                // Fallback list of common cities
+                const commonCities = [
+                    'Toronto, Canada',
+                    'New York, United States',
+                    'London, United Kingdom',
+                    'Paris, France',
+                    'Tokyo, Japan',
+                    'Sydney, Australia',
+                    'Berlin, Germany',
+                    'Mumbai, India',
+                    'São Paulo, Brazil',
+                    'Mexico City, Mexico'
+                ].filter(city => city.toLowerCase().includes(query.toLowerCase()));
+
+                if (commonCities.length > 0) {
+                    const fallbackData = commonCities.map(city => {
+                        const [name, country] = city.split(', ');
+                        return { name: name.trim(), countryName: country.trim() };
+                    });
+                    displaySuggestions(fallbackData);
+                } else {
+                    suggestionsDiv.classList.remove('show');
+                }
+            }
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!locationInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.classList.remove('show');
+                }
+            });
+
+            // Keyboard navigation
+            locationInput.addEventListener('keydown', function(e) {
+                const suggestions = suggestionsDiv.querySelectorAll('.location-suggestion');
+                const selected = suggestionsDiv.querySelector('.location-suggestion.selected');
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (selected) {
+                        selected.classList.remove('selected');
+                        const next = selected.nextElementSibling;
+                        if (next) {
+                            next.classList.add('selected');
+                            next.scrollIntoView({ block: 'nearest' });
+                        } else {
+                            suggestions[0]?.classList.add('selected');
+                        }
+                    } else {
+                        suggestions[0]?.classList.add('selected');
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (selected) {
+                        selected.classList.remove('selected');
+                        const prev = selected.previousElementSibling;
+                        if (prev) {
+                            prev.classList.add('selected');
+                            prev.scrollIntoView({ block: 'nearest' });
+                        } else {
+                            suggestions[suggestions.length - 1]?.classList.add('selected');
+                        }
+                    } else {
+                        suggestions[suggestions.length - 1]?.classList.add('selected');
+                    }
+                } else if (e.key === 'Enter' && selected) {
+                    e.preventDefault();
+                    locationInput.value = selected.dataset.full;
+                    suggestionsDiv.classList.remove('show');
+                } else if (e.key === 'Escape') {
+                    suggestionsDiv.classList.remove('show');
+                }
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -50,16 +50,21 @@
                     <button type="submit" class="search-btn">Search</button>
                 </div>
                 <div class="filter-row">
-                    <select name="category" class="category-select">
-                        <option value="">All Categories</option>
-                        <option value="Tops" {% if category_filter == 'Tops' %}selected{% endif %}>Tops</option>
-                        <option value="Dresses" {% if category_filter == 'Dresses' %}selected{% endif %}>Dresses</option>
-                        <option value="Jackets" {% if category_filter == 'Jackets' %}selected{% endif %}>Jackets</option>
-                        <option value="Pants" {% if category_filter == 'Pants' %}selected{% endif %}>Pants</option>
-                        <option value="Shoes" {% if category_filter == 'Shoes' %}selected{% endif %}>Shoes</option>
-                        <option value="Accessories" {% if category_filter == 'Accessories' %}selected{% endif %}>Accessories</option>
-                        <option value="Sweaters" {% if category_filter == 'Sweaters' %}selected{% endif %}>Sweaters</option>
-                    </select>
+                    <div class="searchable-select-wrapper">
+                        <input type="text" id="category-search" class="category-search-input" placeholder="Search categories..." autocomplete="off">
+                        <select name="category" id="category-select" class="category-select" style="display: none;">
+                            <option value="">All Categories</option>
+                            <option value="Tops" {% if category_filter == 'Tops' %}selected{% endif %}>Tops</option>
+                            <option value="Dresses" {% if category_filter == 'Dresses' %}selected{% endif %}>Dresses</option>
+                            <option value="Jackets" {% if category_filter == 'Jackets' %}selected{% endif %}>Jackets</option>
+                            <option value="Pants" {% if category_filter == 'Pants' %}selected{% endif %}>Pants</option>
+                            <option value="Shoes" {% if category_filter == 'Shoes' %}selected{% endif %}>Shoes</option>
+                            <option value="Accessories" {% if category_filter == 'Accessories' %}selected{% endif %}>Accessories</option>
+                            <option value="Sweaters" {% if category_filter == 'Sweaters' %}selected{% endif %}>Sweaters</option>
+                            <option value="Skirts" {% if category_filter == 'Skirts' %}selected{% endif %}>Skirts</option>
+                        </select>
+                        <div id="category-dropdown" class="category-dropdown"></div>
+                    </div>
                     {% if username %}
                         <a href="{{ url_for('main.create_listing_page') }}" class="post-listing-btn">+ Post New Item</a>
                     {% endif %}
@@ -70,8 +75,8 @@
         <!-- Results Section -->
         <div class="results-section">
         <div class="results-header">
-            <h2>Latest Eco-Friendly Items</h2>
-            <span class="results-count">{{ listings|length }} sustainable items found</span>
+            <h2>Latest Listings</h2>
+            <span class="results-count">{{ listings|length }} items found</span>
         </div>
 
             {% if listings %}
@@ -120,5 +125,96 @@
             <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
         </div>
     </footer>
+
+    <script>
+        // Searchable category dropdown
+        (function() {
+            const categorySelect = document.getElementById('category-select');
+            const categorySearch = document.getElementById('category-search');
+            const categoryDropdown = document.getElementById('category-dropdown');
+            const options = Array.from(categorySelect.options);
+            
+            // Set initial value
+            const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                categorySearch.value = selectedOption.text;
+            } else {
+                categorySearch.value = '';
+            }
+            
+            // Build dropdown options
+            function buildDropdown(filter = '') {
+                categoryDropdown.innerHTML = '';
+                const filterLower = filter.toLowerCase();
+                
+                options.forEach((option, index) => {
+                    if (option.text.toLowerCase().includes(filterLower)) {
+                        const div = document.createElement('div');
+                        div.className = 'category-option';
+                        if (option.selected) {
+                            div.classList.add('selected');
+                        }
+                        div.textContent = option.text;
+                        div.dataset.value = option.value;
+                        div.dataset.index = index;
+                        
+                        div.addEventListener('click', function() {
+                            // Update select
+                            categorySelect.selectedIndex = parseInt(this.dataset.index);
+                            categorySearch.value = option.text;
+                            categoryDropdown.classList.remove('show');
+                            
+                            // Remove selected class from all
+                            document.querySelectorAll('.category-option').forEach(opt => {
+                                opt.classList.remove('selected');
+                            });
+                            // Add to clicked
+                            this.classList.add('selected');
+                        });
+                        
+                        categoryDropdown.appendChild(div);
+                    }
+                });
+            }
+            
+            // Show dropdown on focus
+            categorySearch.addEventListener('focus', function() {
+                buildDropdown();
+                categoryDropdown.classList.add('show');
+            });
+            
+            // Filter on input
+            categorySearch.addEventListener('input', function() {
+                buildDropdown(this.value);
+                categoryDropdown.classList.add('show');
+            });
+            
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!categorySearch.contains(e.target) && !categoryDropdown.contains(e.target)) {
+                    categoryDropdown.classList.remove('show');
+                    // Restore value if nothing was selected
+                    if (categorySelect.selectedIndex >= 0) {
+                        const selected = categorySelect.options[categorySelect.selectedIndex];
+                        categorySearch.value = selected ? selected.text : '';
+                    }
+                }
+            });
+            
+            // Prevent form submission if dropdown is open
+            categorySearch.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && categoryDropdown.classList.contains('show')) {
+                    e.preventDefault();
+                    const firstOption = categoryDropdown.querySelector('.category-option:not(.hidden)');
+                    if (firstOption) {
+                        firstOption.click();
+                    }
+                }
+            });
+            
+            // Initial build
+            buildDropdown();
+        })();
+    </script>
 </body>
 </html>

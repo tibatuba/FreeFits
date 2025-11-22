@@ -11,6 +11,9 @@ body {
     min-height: 100vh;
     line-height: 1.6;
     position: relative;
+    overflow-x: hidden;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* Sloth mascot removed from body::before - now in footer */
@@ -61,6 +64,11 @@ main {
     box-shadow: 0 8px 32px rgba(0,0,0,0.1);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.2);
+    box-sizing: border-box;
+    width: 90%;
+    max-width: 500px;
+    min-width: 300px;
+    overflow: hidden;
 }
 
 /* Typography */
@@ -97,6 +105,7 @@ input {
     font-size: 1rem;
     transition: all 0.3s ease;
     background: rgba(255, 255, 255, 0.8);
+    box-sizing: border-box;
 }
 
 input:focus {
@@ -306,6 +315,8 @@ footer {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    position: relative;
+    z-index: 10;
 }
 
 .search-form {
@@ -326,6 +337,7 @@ footer {
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
+    margin-top: 0.5rem;
 }
 
 .search-input, .location-input {
@@ -349,29 +361,170 @@ footer {
     font-size: 1rem;
     background: white;
     cursor: pointer;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* Searchable category dropdown */
+.searchable-select-wrapper {
+    position: relative;
+    width: 100%;
+    flex: 1;
+}
+
+.category-search-input {
+    padding: 1rem;
+    border: 2px solid #e1e5e9;
+    border-radius: 12px;
+    font-size: 1rem;
+    width: 100%;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.category-search-input:focus {
+    outline: none;
+    border-color: #2d5a2d;
+    box-shadow: 0 0 0 3px rgba(45, 90, 45, 0.2);
+}
+
+.category-search-input::placeholder {
+    color: #999;
+}
+
+.category-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: white;
+    border: 2px solid #2d5a2d;
+    border-radius: 12px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 10001;
+    display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    margin-top: 4px;
+}
+
+.category-dropdown.show {
+    display: block;
+}
+
+.category-option {
+    padding: 0.875rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.95rem;
+}
+
+.category-option:first-child {
+    border-radius: 12px 12px 0 0;
+}
+
+.category-option:last-child {
+    border-bottom: none;
+    border-radius: 0 0 12px 12px;
+}
+
+.category-option:hover {
+    background-color: #f0f7f0;
+}
+
+.category-option.selected {
+    background-color: #2d5a2d;
+    color: white;
+}
+
+.category-option.hidden {
+    display: none;
+}
+
+/* Location autocomplete suggestions */
+.location-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 2px solid #2d5a2d;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 10001;
+    display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    margin-top: 4px;
+}
+
+.location-suggestions.show {
+    display: block;
+}
+
+.location-suggestion {
+    padding: 0.875rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.95rem;
+}
+
+.location-suggestion:first-child {
+    border-radius: 12px 12px 0 0;
+}
+
+.location-suggestion:last-child {
+    border-bottom: none;
+    border-radius: 0 0 12px 12px;
+}
+
+.location-suggestion:hover {
+    background-color: #f0f7f0;
+}
+
+.location-suggestion.selected {
+    background-color: #2d5a2d;
+    color: white;
+}
+
+/* Form wrapper for location input */
+form {
+    position: relative;
+}
+
+/* Location input wrapper */
+label[for="location"] {
+    position: relative;
+}
+
+#location {
+    position: relative;
 }
 
 .search-btn {
     background: linear-gradient(135deg, #1a4d1a 0%, #2d5a2d 50%, #3d6b3d 100%);
     color: white;
     border: none;
-    padding: 1rem 2rem;
+    padding: 1rem 1.5rem;
     border-radius: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
-    position: relative;
-    overflow: hidden;
+    height: fit-content;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .search-btn::before {
-    content: '🔍';
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 1rem;
+    display: none;
 }
 
 .search-btn:hover {
@@ -412,6 +565,8 @@ footer {
     border-radius: 16px;
     padding: 2rem;
     box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    position: relative;
+    z-index: 1;
 }
 
 .results-header {
@@ -866,6 +1021,12 @@ footer {
 
 /* Responsive design */
 @media (max-width: 768px) {
+    main {
+        width: calc(100% - 2rem);
+        padding: 2rem 1.5rem;
+        margin: 1rem auto;
+    }
+    
     .marketplace {
         padding: 1rem;
     }
