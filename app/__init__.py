@@ -39,6 +39,12 @@ def create_app():
             listings.create_index("category")
             listings.create_index("created_at")
             listings.create_index([("title", "text"), ("description", "text")])  # Text search index
+            # Geospatial index for location-based searches
+            try:
+                listings.create_index([("location_coords", "2dsphere")])
+            except Exception as e:
+                # Index might already exist, or coordinates might not be present yet
+                print(f"Note: Geospatial index creation: {e}")
             
             print("MongoDB connected successfully!")
         except Exception as e:

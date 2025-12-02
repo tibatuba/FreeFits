@@ -65,7 +65,36 @@
                 </select>
 
                 <label for="size">Size *</label>
-                <input type="text" id="size" name="size" placeholder="e.g., M, L, One Size" required>
+                <div class="custom-multi-select-wrapper">
+                    <div class="custom-multi-select" id="size-select">
+                        <div class="custom-multi-select-display">
+                            <span class="custom-multi-select-placeholder">Select size(s)</span>
+                            <span class="custom-multi-select-arrow">▼</span>
+                        </div>
+                        <div class="custom-multi-select-dropdown" id="size-dropdown">
+                            <div class="custom-multi-select-option" data-value="Small">
+                                <input type="checkbox" id="size-small" value="Small" name="size">
+                                <label for="size-small">Small</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="Medium">
+                                <input type="checkbox" id="size-medium" value="Medium" name="size">
+                                <label for="size-medium">Medium</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="Large">
+                                <input type="checkbox" id="size-large" value="Large" name="size">
+                                <label for="size-large">Large</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="XL">
+                                <input type="checkbox" id="size-xl" value="XL" name="size">
+                                <label for="size-xl">XL</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="2XL">
+                                <input type="checkbox" id="size-2xl" value="2XL" name="size">
+                                <label for="size-2xl">2XL</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <label for="condition">Condition *</label>
                 <select id="condition" name="condition" required>
@@ -76,8 +105,14 @@
                     <option value="Fair">Fair</option>
                 </select>
 
-                <label for="location">Location (City, State/Province) *</label>
-                <input type="text" id="location" name="location" placeholder="e.g., Toronto, ON" required>
+                <label for="location">Location (Address, City, Province, Postal Code) *</label>
+                <div class="location-input-wrapper" style="position: relative;">
+                    <input type="text" id="location" name="location" placeholder="e.g., 123 Main St, Toronto, ON or L5M 6R7" required autocomplete="off">
+                    <input type="hidden" id="location-selected" name="location-selected" value="false">
+                    <div id="location-suggestions" class="location-suggestions"></div>
+                </div>
+                <div id="location-error" style="color: #d32f2f; font-size: 0.85rem; margin-top: 0.25rem; display: none;">Please select a location from the list or choose "Other"</div>
+                <small style="color: #666; font-size: 0.85rem;">Start typing your address, city, or postal code. You must select from the list. Selected location will be formatted as: Postal Code Prefix (e.g., L5M) + City + Province</small>
 
                 <div class="form-actions">
                     <button type="submit" class="submit-btn">Create Listing</button>
@@ -93,6 +128,388 @@
             <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
         </div>
     </footer>
+
+    <script>
+        // Location Autocomplete for Create Listing - Same as home page
+        (function() {
+            const locationInput = document.getElementById('location');
+            const suggestionsDiv = document.getElementById('location-suggestions');
+            const locationSelected = document.getElementById('location-selected');
+            const locationError = document.getElementById('location-error');
+            const form = locationInput.closest('form');
+            let debounceTimer;
+            let currentSuggestions = [];
+            let selectedIndex = -1;
+            let isLocationSelected = false;
+
+            if (!locationInput || !suggestionsDiv) {
+                console.error('Location autocomplete elements not found');
+                return;
+            }
+
+            // Prevent form submission if location not selected
+            form.addEventListener('submit', function(e) {
+                if (!isLocationSelected) {
+                    e.preventDefault();
+                    locationError.style.display = 'block';
+                    locationInput.style.borderColor = '#d32f2f';
+                    locationInput.focus();
+                    return false;
+                }
+            });
+
+            locationInput.addEventListener('input', function() {
+                // If input is read-only (location already selected), don't process
+                if (locationInput.readOnly) {
+                    return;
+                }
+                
+                const query = this.value.trim();
+                
+                clearTimeout(debounceTimer);
+                selectedIndex = -1;
+                isLocationSelected = false;
+                locationSelected.value = 'false';
+                locationError.style.display = 'none';
+                locationInput.style.borderColor = '';
+                
+                if (query.length < 2) {
+                    suggestionsDiv.classList.remove('show');
+                    return;
+                }
+
+                debounceTimer = setTimeout(() => {
+                    searchCanadianLocations(query);
+                }, 300);
+            });
+
+            locationInput.addEventListener('focus', function() {
+                if (locationInput.readOnly) {
+                    // Allow clearing selection to search again
+                    locationInput.readOnly = false;
+                    locationInput.value = '';
+                    isLocationSelected = false;
+                    locationSelected.value = 'false';
+                } else if (this.value.trim().length >= 2 && currentSuggestions.length > 0) {
+                    suggestionsDiv.classList.add('show');
+                }
+            });
+
+            function searchCanadianLocations(query) {
+                const cleanQuery = query.replace(/\s+/g, '').toUpperCase();
+                const postalCodePattern = /^[A-Za-z]\d[A-Za-z]/;
+                
+                if (cleanQuery.length >= 6 && postalCodePattern.test(cleanQuery)) {
+                    searchPostalCode(cleanQuery);
+                } else {
+                    searchCanadianAddresses(query);
+                }
+            }
+
+            function searchPostalCode(postalCode) {
+                let formatted = postalCode;
+                if (postalCode.length === 6) {
+                    formatted = `${postalCode.substring(0, 3)} ${postalCode.substring(3)}`;
+                } else if (postalCode.length === 7 && postalCode.includes(' ')) {
+                    formatted = postalCode;
+                }
+                
+                const url = `https://geocoder.ca/${encodeURIComponent(formatted)}?json=1`;
+                
+                fetch(url)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data && data.latt && data.longt) {
+                            const city = data.city || '';
+                            const prov = data.prov || '';
+                            const postalPrefix = formatted.substring(0, 3);
+                            const displayText = city && prov ? `${postalPrefix} ${city}, ${prov} ${formatted}` : prov ? `${postalPrefix} ${formatted}, ${prov}` : formatted;
+                            
+                            currentSuggestions = [{
+                                description: displayText,
+                                lat: parseFloat(data.latt),
+                                lon: parseFloat(data.longt),
+                                postalCode: formatted,
+                                postalPrefix: postalPrefix
+                            }];
+                            displaySuggestions(currentSuggestions);
+                        } else {
+                            searchCanadianAddresses(formatted);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching postal code:', error);
+                        searchCanadianAddresses(postalCode);
+                    });
+            }
+
+            function searchCanadianAddresses(query) {
+                const searchQuery = `${query}, Canada`;
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=ca&limit=10&addressdetails=1`;
+                
+                fetch(url, {
+                    headers: {
+                        'User-Agent': 'FreeFits/1.0'
+                    }
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            const canadianResults = data.filter(item => {
+                                const address = item.address || {};
+                                const country = (address.country || '').toLowerCase();
+                                return country.includes('canada') || country === 'ca';
+                            });
+                            
+                            if (canadianResults.length > 0) {
+                                currentSuggestions = canadianResults.map(item => ({
+                                    description: formatCanadianAddress(item),
+                                    lat: parseFloat(item.lat),
+                                    lon: parseFloat(item.lon),
+                                    address: item.address
+                                }));
+                                displaySuggestions(currentSuggestions);
+                            } else {
+                                currentSuggestions = data.map(item => ({
+                                    description: formatCanadianAddress(item),
+                                    lat: parseFloat(item.lat),
+                                    lon: parseFloat(item.lon),
+                                    address: item.address
+                                }));
+                                displaySuggestions(currentSuggestions);
+                            }
+                        } else {
+                            suggestionsDiv.classList.remove('show');
+                            currentSuggestions = [];
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching locations:', error);
+                        suggestionsDiv.classList.remove('show');
+                        currentSuggestions = [];
+                    });
+            }
+
+            function formatCanadianAddress(result) {
+                const address = result.address || {};
+                const parts = [];
+                let postalPrefix = '';
+
+                // Extract postal code prefix (first 3 characters) - REQUIRED FORMAT
+                if (address.postcode) {
+                    const postcode = address.postcode.replace(/\s+/g, '').toUpperCase();
+                    if (postcode.length >= 3) {
+                        postalPrefix = postcode.substring(0, 3);
+                        parts.push(postalPrefix); // Add postal prefix first
+                    }
+                }
+
+                // Add city/town (required)
+                if (address.city) {
+                    parts.push(address.city);
+                } else if (address.town) {
+                    parts.push(address.town);
+                } else if (address.village) {
+                    parts.push(address.village);
+                } else if (address.municipality) {
+                    parts.push(address.municipality);
+                } else if (address.suburb) {
+                    parts.push(address.suburb);
+                }
+
+                // Add province/state (required)
+                if (address.state) {
+                    parts.push(address.state);
+                } else if (address.province) {
+                    parts.push(address.province);
+                }
+
+                // Format: "L5M Toronto, ON" or "Toronto, ON" if no postal code
+                if (parts.length > 0) {
+                    return parts.join(', ');
+                } else {
+                    // Fallback: try to extract from display_name
+                    const displayName = result.display_name || '';
+                    return displayName;
+                }
+            }
+
+            function displaySuggestions(results) {
+                if (!suggestionsDiv) return;
+
+                suggestionsDiv.innerHTML = '';
+
+                // Always add "Other" option at the end
+                const otherOption = {
+                    description: 'Other',
+                    isOther: true
+                };
+                const allResults = [...results, otherOption];
+
+                if (allResults.length === 0) {
+                    suggestionsDiv.classList.remove('show');
+                    return;
+                }
+
+                allResults.forEach((result, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'location-suggestion';
+                    if (index === selectedIndex) {
+                        div.classList.add('selected');
+                    }
+                    if (result.isOther) {
+                        div.style.fontWeight = '600';
+                        div.style.color = '#2d5a2d';
+                    }
+
+                    const displayText = result.description || result.display_name || 'Unknown location';
+                    div.textContent = displayText;
+                    div.dataset.full = displayText;
+                    div.dataset.lat = result.lat || '';
+                    div.dataset.lon = result.lon || '';
+                    div.dataset.isOther = result.isOther ? 'true' : 'false';
+
+                    div.addEventListener('click', function() {
+                        if (result.isOther) {
+                            // Set "Other" as the selected value
+                            locationInput.value = 'Other';
+                            isLocationSelected = true;
+                            locationSelected.value = 'true';
+                            locationError.style.display = 'none';
+                            locationInput.style.borderColor = '';
+                            locationInput.readOnly = true; // Prevent editing
+                        } else {
+                            locationInput.value = this.dataset.full;
+                            isLocationSelected = true;
+                            locationSelected.value = 'true';
+                            locationError.style.display = 'none';
+                            locationInput.style.borderColor = '';
+                            locationInput.readOnly = true; // Prevent editing
+                        }
+                        suggestionsDiv.classList.remove('show');
+                        selectedIndex = -1;
+                    });
+
+                    div.addEventListener('mouseenter', function() {
+                        document.querySelectorAll('.location-suggestion').forEach(s => {
+                            s.classList.remove('selected');
+                        });
+                        this.classList.add('selected');
+                        selectedIndex = index;
+                    });
+
+                    suggestionsDiv.appendChild(div);
+                });
+
+                suggestionsDiv.classList.add('show');
+            }
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!locationInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
+                }
+            });
+
+            // Keyboard navigation
+            locationInput.addEventListener('keydown', function(e) {
+                const suggestions = suggestionsDiv.querySelectorAll('.location-suggestion');
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (suggestions.length > 0) {
+                        selectedIndex = (selectedIndex + 1) % suggestions.length;
+                        updateSelection(suggestions);
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (suggestions.length > 0) {
+                        selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1;
+                        updateSelection(suggestions);
+                    }
+                } else if (e.key === 'Enter') {
+                    if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+                        e.preventDefault();
+                        locationInput.value = suggestions[selectedIndex].dataset.full;
+                        suggestionsDiv.classList.remove('show');
+                        selectedIndex = -1;
+                    }
+                } else if (e.key === 'Escape') {
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
+                }
+            });
+
+            function updateSelection(suggestions) {
+                suggestions.forEach((s, i) => {
+                    s.classList.toggle('selected', i === selectedIndex);
+                });
+                if (suggestions[selectedIndex]) {
+                    suggestions[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+            }
+        })();
+
+        // Custom Multi-Select Dropdown for Size
+        (function() {
+            const sizeSelect = document.getElementById('size-select');
+            const sizeDisplay = sizeSelect.querySelector('.custom-multi-select-display');
+            const sizePlaceholder = sizeSelect.querySelector('.custom-multi-select-placeholder');
+            const sizeDropdown = document.getElementById('size-dropdown');
+            const checkboxes = sizeDropdown.querySelectorAll('input[type="checkbox"]');
+
+            // Toggle dropdown
+            sizeDisplay.addEventListener('click', function(e) {
+                e.stopPropagation();
+                sizeSelect.classList.toggle('active');
+            });
+
+            // Handle checkbox changes
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    updateDisplay();
+                });
+            });
+
+            // Update display text
+            function updateDisplay() {
+                const selected = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+                
+                if (selected.length === 0) {
+                    sizePlaceholder.textContent = 'Select size(s)';
+                    sizePlaceholder.classList.remove('custom-multi-select-selected');
+                } else {
+                    sizePlaceholder.textContent = selected.join(', ');
+                    sizePlaceholder.classList.add('custom-multi-select-selected');
+                }
+            }
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!sizeSelect.contains(e.target)) {
+                    sizeSelect.classList.remove('active');
+                }
+            });
+
+            // Prevent dropdown from closing when clicking inside
+            sizeDropdown.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        })();
+    </script>
 </body>
 </html>
 

@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
 from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, get_listings_by_user
+from app.geocoding import geocode_location, geocode_postal_code
 
 main = Blueprint("main", __name__)
 
@@ -19,16 +20,89 @@ def home():
     category_filter = request.args.get('category', '')
     distance_filter = request.args.get('distance', '')
     
+    # Get coordinates from browser geolocation (if provided)
+    user_lat = request.args.get('user_lat')
+    user_lon = request.args.get('user_lon')
+    if user_lat and user_lon:
+        try:
+            user_lat = float(user_lat)
+            user_lon = float(user_lon)
+        except (ValueError, TypeError):
+            user_lat = None
+            user_lon = None
+    
+    max_distance_km = None
+    
+    # Get user's profile location for display (if logged in)
+    user_profile_location = None
+    if username and db is not None:
+        user = db["users"].find_one({"username": username})
+        if user:
+            user_profile_location = user.get("location")
+            # If no coordinates from browser, try to use profile coordinates
+            if not user_lat and not user_lon:
+                user_lat = user.get("latitude")
+                user_lon = user.get("longitude")
+                if user_lat and user_lon and not location_filter:
+                    location_filter = user_profile_location
+    
+    # Geocode user location if provided (and not already have coordinates)
+    if location_filter and not (user_lat and user_lon):
+        print(f"DEBUG ROUTES: Geocoding location_filter='{location_filter}'")
+        # Try to geocode the location (postal code or city)
+        geocode_result = geocode_location(location_filter)
+        if geocode_result:
+            user_lat, user_lon, formatted_location = geocode_result
+            print(f"DEBUG ROUTES: Successfully geocoded to lat={user_lat}, lon={user_lon}")
+        else:
+            # If geocoding fails, still try to search by text location
+            print(f"DEBUG ROUTES: Geocoding failed for '{location_filter}'")
+            flash(f"Could not find exact coordinates for '{location_filter}'. Showing results by location text match.", "warning")
+    
+    # Set max distance if distance filter is provided
+    # Note: We'll still try to use distance even if we don't have user coordinates yet
+    if distance_filter:
+        try:
+            max_distance_km = float(distance_filter) if distance_filter else None
+        except (ValueError, TypeError):
+            max_distance_km = None
+    
+    # If distance filter is set but we don't have coordinates, try to geocode location_filter
+    if max_distance_km is not None and not (user_lat and user_lon) and location_filter:
+        geocode_result = geocode_location(location_filter)
+        if geocode_result:
+            user_lat, user_lon, formatted_location = geocode_result
+    
     # Get listings based on search/filters
-    if search_query or location_filter or category_filter:
+    # If location or distance filter is provided, always use search (even if no other filters)
+    # But if distance_filter is empty/None, don't filter by distance - show all listings
+    if search_query or location_filter or category_filter or (distance_filter and distance_filter.strip()):
+        # Debug: Print search parameters (force flush to see immediately)
+        import sys
+        print(f"DEBUG: search_query={search_query}, location_filter={location_filter}, category_filter={category_filter}, distance_filter={distance_filter}", flush=True)
+        print(f"DEBUG: user_lat={user_lat}, user_lon={user_lon}, max_distance_km={max_distance_km}", flush=True)
+        
         listings = search_listings(
             db,
             query=search_query if search_query else None,
             category=category_filter if category_filter else None,
-            location=location_filter if location_filter else None
+            location=location_filter if location_filter and not (user_lat and user_lon) else None,
+            max_distance=max_distance_km,
+            user_lat=user_lat,
+            user_lon=user_lon
         )
+        print(f"DEBUG: Found {len(listings)} listings", flush=True)
+        
+        # If no listings found, try to get all listings to see if database has any
+        if len(listings) == 0 and db is not None:
+            all_listings = db["listings"].find({"is_available": True}).limit(5)
+            all_listings_list = list(all_listings)
+            print(f"DEBUG: Database has {len(all_listings_list)} available listings total", flush=True)
+            for listing_doc in all_listings_list:
+                print(f"DEBUG: Sample listing - title: {listing_doc.get('title')}, location: {listing_doc.get('location')}, lat: {listing_doc.get('latitude')}, lon: {listing_doc.get('longitude')}", flush=True)
     else:
         listings = get_latest_listings(db)
+    
     
     return render_template("home.html", 
                          username=username, 
@@ -36,7 +110,8 @@ def home():
                          search_query=search_query,
                          location_filter=location_filter,
                          category_filter=category_filter,
-                         distance_filter=distance_filter)
+                         distance_filter=distance_filter,
+                         user_profile_location=user_profile_location)
 
 # Login route
 @main.route("/login", methods=["GET", "POST"])
@@ -104,11 +179,21 @@ def register():
             return render_template("register.html", error="Username or email already exists.")
 
         password_hash = generate_password_hash(password)
+        
+        # Geocode user location to store coordinates
+        latitude = None
+        longitude = None
+        geocode_result = geocode_location(location)
+        if geocode_result:
+            latitude, longitude, formatted_location = geocode_result
+        
         users.insert_one({
             "username": username,
             "email": email,
             "password_hash": password_hash,
             "location": location,
+            "latitude": latitude,
+            "longitude": longitude,
             "created_at": datetime.utcnow()
         })
 
@@ -144,16 +229,23 @@ def create_listing_page():
         title = request.form.get("title")
         description = request.form.get("description")
         category = request.form.get("category")
-        size = request.form.get("size")
+        size_list = request.form.getlist("size")
+        size = ", ".join(size_list) if size_list else request.form.get("size")
         condition = request.form.get("condition")
         location = request.form.get("location")
         image_file = request.files.get("image")
         
         # Basic validation
-        if not all([title, description, category, size, condition, location]):
+        if not all([title, description, category, condition, location]):
             return render_template("create_listing.html", 
                                  username=username,
                                  error="All fields are required.")
+        
+        # Validate size (at least one must be selected)
+        if not size or not size.strip():
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error="Please select at least one size.")
         
         # Validate image
         if not image_file or image_file.filename == '':
@@ -180,6 +272,15 @@ def create_listing_page():
         filepath = os.path.join(upload_folder, filename)
         image_file.save(filepath)
         
+        # Geocode the location to get coordinates
+        latitude = None
+        longitude = None
+        geocode_result = geocode_location(location)
+        if geocode_result:
+            latitude, longitude, formatted_location = geocode_result
+            # Optionally update location with formatted version
+            # location = formatted_location
+        
         # Create the listing
         db = getattr(current_app, "mongo_db", None)
         new_listing = create_listing(
@@ -191,7 +292,9 @@ def create_listing_page():
             condition=condition,
             location=location,
             user_id=username,
-            image_filename=filename
+            image_filename=filename,
+            latitude=latitude,
+            longitude=longitude
         )
         
         flash("Listing created successfully!", "success")

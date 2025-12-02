@@ -65,16 +65,16 @@
                     </div>
 
                     <div class="detail-location">
-                        <h3>📍 Location</h3>
+                        <h3>Location</h3>
                         <p>{{ listing.location }}</p>
                     </div>
 
                     <div class="detail-actions">
-                        {% if username %}
+                        {% if username and username != listing.user_id %}
                             <form action="{{ url_for('main.contact_seller', listing_id=listing.id) }}" method="POST">
                                 <button type="submit" class="contact-btn-large">💬 Contact Seller</button>
                             </form>
-                        {% else %}
+                        {% elif not username %}
                             <a href="{{ url_for('main.login') }}" class="contact-btn-large">💬 Login to Contact Seller</a>
                         {% endif %}
                     </div>
