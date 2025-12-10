@@ -9,10 +9,22 @@
 <body>
     <header>
         <div class="header-content">
-            <h1>FreeFits</h1>
+            <h1 class="site-logo">
+                <a href="{{ url_for('main.home') }}" class="logo-link">
+                    <img src="{{ url_for('static', filename='images/headerlogo.png') }}" 
+                         alt="FreeFits Logo" 
+                         class="logo-img">
+                </a>
+            </h1>
             <nav class="user-nav">
                 {% if username %}
                     <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.messages') }}" class="nav-link messages-link">
+                        Messages
+                        {% if unread_count and unread_count > 0 %}
+                            <span class="unread-badge">{{ unread_count }}</span>
+                        {% endif %}
+                    </a>
                     <a href="{{ url_for('main.my_listings') }}" class="nav-link">My Listings</a>
                     <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
                 {% else %}
@@ -32,48 +44,131 @@
             {% endif %}
         {% endwith %}
 
-        <!-- Search and Filter Section -->
-        <div class="search-section">
-            <form method="GET" class="search-form">
-                <div class="search-row">
-                    <input type="text" name="search" placeholder="Search for sustainable clothing items..." 
-                           value="{{ search_query }}" class="search-input">
-                    <div class="location-input-wrapper" style="position: relative; flex: 1;">
-                        <input type="text" name="location" id="location-search" placeholder="Your postal code or city (e.g., M5H 2N2 or Toronto, ON)" 
-                               value="{{ location_filter }}" class="location-input" autocomplete="off">
-                        <div id="location-suggestions" class="location-suggestions"></div>
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-grid">
+                <div class="hero-copy">
+                    <div class="eyebrow">Circular fashion • Community powered</div>
+                    <h1 class="hero-title">Give great clothes a second life—for free.</h1>
+                    <p class="hero-subtitle">
+                        Discover quality pieces near you and keep them out of landfills. Search by style, size, and distance, or share what you no longer need.
+                    </p>
+                    <div class="hero-actions">
+                        <a href="#search" class="btn primary">Browse listings</a>
+                        {% if username %}
+                            <a href="{{ url_for('main.create_listing_page') }}" class="btn ghost">Post an item</a>
+                        {% else %}
+                            <a href="{{ url_for('main.register') }}" class="btn ghost">Join FreeFits</a>
+                        {% endif %}
                     </div>
-                    <button type="button" id="use-current-location-btn" class="use-location-btn" title="Use your current location">
-                        Use current location
-                    </button>
-                    <select name="distance" class="distance-select">
-                        <option value="">Any distance</option>
-                        <option value="5" {% if distance_filter == '5' %}selected{% endif %}>Within 5 km</option>
-                        <option value="10" {% if distance_filter == '10' %}selected{% endif %}>Within 10 km</option>
-                        <option value="20" {% if distance_filter == '20' %}selected{% endif %}>Within 20 km</option>
-                        <option value="50" {% if distance_filter == '50' %}selected{% endif %}>Within 50 km</option>
-                    </select>
-                    <button type="submit" class="search-btn">Search</button>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <div class="stat-value">3.2k+</div>
+                            <div class="stat-label">Items re-homed</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">18</div>
+                            <div class="stat-label">Active communities</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">100%</div>
+                            <div class="stat-label">Always free to list</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="filter-row">
-                    <div class="searchable-select-wrapper">
-                        <input type="text" id="category-search" class="category-search-input" placeholder="Search categories..." autocomplete="off">
-                        <select name="category" id="category-select" class="category-select" style="display: none;">
-                            <option value="">All Categories</option>
-                            <option value="Tops" {% if category_filter == 'Tops' %}selected{% endif %}>Tops</option>
-                            <option value="Dresses" {% if category_filter == 'Dresses' %}selected{% endif %}>Dresses</option>
-                            <option value="Jackets" {% if category_filter == 'Jackets' %}selected{% endif %}>Jackets</option>
-                            <option value="Pants" {% if category_filter == 'Pants' %}selected{% endif %}>Pants</option>
-                            <option value="Shoes" {% if category_filter == 'Shoes' %}selected{% endif %}>Shoes</option>
-                            <option value="Accessories" {% if category_filter == 'Accessories' %}selected{% endif %}>Accessories</option>
-                            <option value="Sweaters" {% if category_filter == 'Sweaters' %}selected{% endif %}>Sweaters</option>
-                            <option value="Skirts" {% if category_filter == 'Skirts' %}selected{% endif %}>Skirts</option>
-                        </select>
-                        <div id="category-dropdown" class="category-dropdown"></div>
+                <div class="hero-card">
+                    <div class="card-header">
+                        <span class="pill success">Local-first</span>
+                        <span class="pill neutral">Safety tips</span>
                     </div>
-                    {% if username %}
-                        <a href="{{ url_for('main.create_listing_page') }}" class="post-listing-btn">+ Post New Item</a>
-                    {% endif %}
+                    <ul class="card-list">
+                        <li><strong>Smart filters</strong> for category, distance, and location.</li>
+                        <li><strong>Verified images</strong> help you see the real condition.</li>
+                        <li><strong>Zero fees</strong>—everything is free to give and receive.</li>
+                    </ul>
+                    <div class="card-footer">
+                        <span class="footnote">Powered by the FreeFits community.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search and Filter Section -->
+        <div id="search" class="search-section">
+            <div class="section-heading">
+                <div>
+                    <div class="eyebrow">Search the marketplace</div>
+                    <h2>Find your next free fit nearby</h2>
+                    <p class="muted">Use precise filters to match your style, size, and distance preferences.</p>
+                </div>
+                <div class="section-pill">
+                    <span class="dot"></span>
+                    Verified community, zero fees
+                </div>
+            </div>
+            <form method="GET" class="search-form">
+                <div class="search-card">
+                    <div class="search-row search-row-primary">
+                        <div class="input-chip">
+                            <label>What are you looking for?</label>
+                            <input type="text" name="search" placeholder="Search for sustainable clothing items..." 
+                                   value="{{ search_query }}" class="search-input">
+                        </div>
+                        <div class="input-chip location-chip">
+                            <label>Location</label>
+                            <div class="location-input-wrapper" style="position: relative; flex: 1;">
+                                <input type="text" name="location" id="location-search" placeholder="Your postal code or city (e.g., M5H 2N2 or Toronto, ON)" 
+                                       value="{{ location_filter }}" class="location-input" autocomplete="off">
+                                <div id="location-suggestions" class="location-suggestions"></div>
+                            </div>
+                        </div>
+                        <div class="input-chip small-chip">
+                            <label>&nbsp;</label>
+                            <button type="button" id="use-current-location-btn" class="use-location-btn" title="Use your current location">
+                                Use current location
+                            </button>
+                        </div>
+                        <div class="input-chip slim-chip">
+                            <label>Distance</label>
+                            <select name="distance" class="distance-select">
+                                <option value="">Any distance</option>
+                                <option value="5" {% if distance_filter == '5' %}selected{% endif %}>Within 5 km</option>
+                                <option value="10" {% if distance_filter == '10' %}selected{% endif %}>Within 10 km</option>
+                                <option value="20" {% if distance_filter == '20' %}selected{% endif %}>Within 20 km</option>
+                                <option value="50" {% if distance_filter == '50' %}selected{% endif %}>Within 50 km</option>
+                            </select>
+                        </div>
+                        <div class="input-chip action-chip">
+                            <label>&nbsp;</label>
+                            <button type="submit" class="search-btn">Search</button>
+                        </div>
+                    </div>
+                    <div class="search-row search-row-secondary">
+                        <div class="input-chip wide-chip">
+                            <label>Category</label>
+                            <div class="searchable-select-wrapper">
+                                <input type="text" id="category-search" class="category-search-input" placeholder="Search categories..." autocomplete="off">
+                                <select name="category" id="category-select" class="category-select" style="display: none;">
+                                    <option value="">All Categories</option>
+                                    <option value="Tops" {% if category_filter == 'Tops' %}selected{% endif %}>Tops</option>
+                                    <option value="Dresses" {% if category_filter == 'Dresses' %}selected{% endif %}>Dresses</option>
+                                    <option value="Jackets" {% if category_filter == 'Jackets' %}selected{% endif %}>Jackets</option>
+                                    <option value="Pants" {% if category_filter == 'Pants' %}selected{% endif %}>Pants</option>
+                                    <option value="Shoes" {% if category_filter == 'Shoes' %}selected{% endif %}>Shoes</option>
+                                    <option value="Accessories" {% if category_filter == 'Accessories' %}selected{% endif %}>Accessories</option>
+                                    <option value="Sweaters" {% if category_filter == 'Sweaters' %}selected{% endif %}>Sweaters</option>
+                                    <option value="Skirts" {% if category_filter == 'Skirts' %}selected{% endif %}>Skirts</option>
+                                </select>
+                                <div id="category-dropdown" class="category-dropdown"></div>
+                            </div>
+                        </div>
+                        {% if username %}
+                            <div class="input-chip skinny-action">
+                                <label>&nbsp;</label>
+                                <a href="{{ url_for('main.create_listing_page') }}" class="post-listing-btn">+ Post New Item</a>
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </form>
         </div>
@@ -129,8 +224,13 @@
     </main>
 
     <footer>
-        <div class="footer-content">
-            <span class="sloth-emoji">🦥</span>
+        <div class="footer-content" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; padding: 1.25rem 0;">
+            <span class="footer logo">
+                <img src="{{ url_for('static', filename='images/footerlogo-modified (1).png') }}"
+                     alt="FreeFits Footer Logo"
+                     class="footer-logo-img"
+                     style="width: 45px; height: auto; object-fit: contain;">
+            </span>
             <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
         </div>
     </footer>
@@ -680,3 +780,4 @@
     </script>
 </body>
 </html>
+ 

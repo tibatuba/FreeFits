@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
-from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, get_listings_by_user
+from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, update_listing, delete_listing, get_listings_by_user, create_message, get_conversation_messages, get_user_conversations, get_or_create_conversation_id, mark_messages_as_read, get_unread_count
 from app.geocoding import geocode_location, geocode_postal_code
 
 main = Blueprint("main", __name__)
@@ -104,6 +104,11 @@ def home():
         listings = get_latest_listings(db)
     
     
+    # Get unread message count if logged in
+    unread_count = 0
+    if username and db is not None:
+        unread_count = get_unread_count(db, username)
+    
     return render_template("home.html", 
                          username=username, 
                          listings=listings,
@@ -111,7 +116,8 @@ def home():
                          location_filter=location_filter,
                          category_filter=category_filter,
                          distance_filter=distance_filter,
-                         user_profile_location=user_profile_location)
+                         user_profile_location=user_profile_location,
+                         unread_count=unread_count)
 
 # Login route
 @main.route("/login", methods=["GET", "POST"])
@@ -213,7 +219,12 @@ def view_listing(listing_id):
         flash("Listing not found.", "error")
         return redirect(url_for("main.home"))
     
-    return render_template("listing_detail.html", listing=listing, username=username)
+    # Get unread message count if logged in
+    unread_count = 0
+    if username and db is not None:
+        unread_count = get_unread_count(db, username)
+    
+    return render_template("listing_detail.html", listing=listing, username=username, unread_count=unread_count)
 
 # Create listing route (requires authentication)
 @main.route("/create", methods=["GET", "POST"])
@@ -283,22 +294,60 @@ def create_listing_page():
         
         # Create the listing
         db = getattr(current_app, "mongo_db", None)
-        new_listing = create_listing(
-            db,
-            title=title,
-            description=description,
-            category=category,
-            size=size,
-            condition=condition,
-            location=location,
-            user_id=username,
-            image_filename=filename,
-            latitude=latitude,
-            longitude=longitude
-        )
         
-        flash("Listing created successfully!", "success")
-        return redirect(url_for("main.view_listing", listing_id=new_listing.id))
+        # Check if database is available
+        if db is None:
+            # Check if MongoDB URI is configured
+            cfg = getattr(current_app, "config", None)
+            if cfg:
+                from config import get_config
+                config = get_config()
+                if not config.MONGO_URI:
+                    error_msg = "MongoDB is not configured. Please set MONGO_URI in your .env file."
+                    print(f"ERROR: {error_msg}")
+                else:
+                    error_msg = f"MongoDB connection failed. URI configured but connection not established. Please check your MongoDB server."
+                    print(f"ERROR: {error_msg}")
+            else:
+                error_msg = "Database connection not available. Please restart the application."
+                print(f"ERROR: {error_msg}")
+            
+            flash("Database connection error. Please check server logs for details.", "error")
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error="Database connection error. Please check that MongoDB is running and configured.")
+        
+        try:
+            new_listing = create_listing(
+                db,
+                title=title,
+                description=description,
+                category=category,
+                size=size,
+                condition=condition,
+                location=location,
+                user_id=username,
+                image_filename=filename,
+                latitude=latitude,
+                longitude=longitude
+            )
+            
+            # Verify the listing was created and has a valid ID
+            if not new_listing or not new_listing.id or new_listing.id == "demo":
+                flash("Failed to save listing. Please try again.", "error")
+                return render_template("create_listing.html", 
+                                     username=username,
+                                     error="Failed to save listing. Please try again.")
+            
+            flash("Listing created successfully!", "success")
+            return redirect(url_for("main.view_listing", listing_id=new_listing.id))
+            
+        except Exception as e:
+            print(f"ERROR creating listing: {e}")
+            flash(f"Error creating listing: {str(e)}", "error")
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error=f"Error creating listing: {str(e)}")
     
     return render_template("create_listing.html", username=username)
 
@@ -318,9 +367,25 @@ def contact_seller(listing_id):
         flash("Listing not found.", "error")
         return redirect(url_for("main.home"))
     
-    # For now, just show a message (you can implement actual messaging later)
-    flash(f"Message sent to seller for '{listing.title}'! (This is a demo - messaging will be implemented later)", "success")
-    return redirect(url_for("main.view_listing", listing_id=listing_id))
+    # Don't allow users to message themselves
+    if listing.user_id == username:
+        flash("You cannot message yourself.", "error")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
+    
+    # Create conversation and redirect to messages
+    conversation_id = get_or_create_conversation_id(username, listing.user_id, listing_id)
+    
+    # Check if this is the first message in the conversation
+    existing_messages = get_conversation_messages(db, conversation_id)
+    if not existing_messages:
+        # Create initial message
+        initial_message = f"Hi! I'm interested in your listing '{listing.title}'."
+        create_message(db, conversation_id, username, listing.user_id, initial_message, listing_id)
+        flash("Message sent! Check your messages to continue the conversation.", "success")
+    else:
+        flash("Redirecting to your conversation...", "info")
+    
+    return redirect(url_for("main.messages", conversation_id=conversation_id))
 
 # My Listings route (requires authentication)
 @main.route("/my-listings")
@@ -336,7 +401,238 @@ def my_listings():
     db = getattr(current_app, "mongo_db", None)
     user_listings = get_listings_by_user(db, username)
     
-    return render_template("my_listings.html", username=username, listings=user_listings)
+    # Get unread message count
+    unread_count = 0
+    if db is not None:
+        unread_count = get_unread_count(db, username)
+    
+    return render_template("my_listings.html", username=username, listings=user_listings, unread_count=unread_count)
+
+# Messages route - list all conversations
+@main.route("/messages")
+def messages():
+    username = session.get("username")
+    
+    # Require authentication
+    if not username:
+        flash("Please log in to view your messages.", "error")
+        return redirect(url_for("main.login"))
+    
+    db = getattr(current_app, "mongo_db", None)
+    conversation_id = request.args.get('conversation_id')
+    
+    # Get all conversations for this user
+    conversations = get_user_conversations(db, username)
+    
+    # Get unread count
+    unread_count = get_unread_count(db, username)
+    
+    # If a specific conversation is requested, get its messages
+    messages_list = []
+    other_user = None
+    listing = None
+    if conversation_id:
+        messages_list = get_conversation_messages(db, conversation_id)
+        # Mark messages as read when viewing conversation
+        mark_messages_as_read(db, conversation_id, username)
+        
+        # Get the other user's username
+        if messages_list:
+            first_message = messages_list[0]
+            if first_message.sender_username == username:
+                other_user = first_message.receiver_username
+            else:
+                other_user = first_message.sender_username
+            
+            # Get listing info if available
+            if first_message.listing_id:
+                listing = get_listing_by_id(db, first_message.listing_id)
+    
+    return render_template("messages.html", 
+                         username=username,
+                         conversations=conversations,
+                         messages=messages_list,
+                         conversation_id=conversation_id,
+                         other_user=other_user,
+                         listing=listing,
+                         unread_count=unread_count)
+
+# Send message route
+@main.route("/messages/send", methods=["POST"])
+def send_message():
+    username = session.get("username")
+    
+    # Require authentication
+    if not username:
+        flash("Please log in to send messages.", "error")
+        return redirect(url_for("main.login"))
+    
+    conversation_id = request.form.get("conversation_id")
+    receiver_username = request.form.get("receiver_username")
+    content = request.form.get("content")
+    listing_id = request.form.get("listing_id")
+    
+    if not conversation_id or not receiver_username or not content:
+        flash("Missing required fields.", "error")
+        return redirect(url_for("main.messages"))
+    
+    db = getattr(current_app, "mongo_db", None)
+    create_message(db, conversation_id, username, receiver_username, content, listing_id if listing_id else None)
+    
+    flash("Message sent!", "success")
+    return redirect(url_for("main.messages", conversation_id=conversation_id))
+
+# Edit listing route (requires authentication and ownership)
+@main.route("/listing/<listing_id>/edit", methods=["GET", "POST"])
+def edit_listing(listing_id):
+    username = session.get("username")
+    
+    # Require authentication
+    if not username:
+        flash("Please log in to edit a listing.", "error")
+        return redirect(url_for("main.login"))
+    
+    db = getattr(current_app, "mongo_db", None)
+    listing = get_listing_by_id(db, listing_id)
+    
+    if not listing:
+        flash("Listing not found.", "error")
+        return redirect(url_for("main.home"))
+    
+    # Check ownership
+    if listing.user_id != username:
+        flash("You can only edit your own listings.", "error")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
+    
+    if request.method == "POST":
+        title = request.form.get("title")
+        description = request.form.get("description")
+        category = request.form.get("category")
+        size_list = request.form.getlist("size")
+        size = ", ".join(size_list) if size_list else request.form.get("size")
+        condition = request.form.get("condition")
+        location = request.form.get("location")
+        image_file = request.files.get("image")
+        
+        # Basic validation
+        if not all([title, description, category, condition, location]):
+            return render_template("edit_listing.html", 
+                                 username=username,
+                                 listing=listing,
+                                 error="All fields are required.")
+        
+        # Validate size (at least one must be selected)
+        if not size or not size.strip():
+            return render_template("edit_listing.html", 
+                                 username=username,
+                                 listing=listing,
+                                 error="Please select at least one size.")
+        
+        # Handle image upload (optional for edit)
+        image_filename = None
+        if image_file and image_file.filename != '':
+            # Check if file is an image
+            allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+            file_ext = image_file.filename.rsplit('.', 1)[1].lower() if '.' in image_file.filename else ''
+            if file_ext not in allowed_extensions:
+                return render_template("edit_listing.html", 
+                                     username=username,
+                                     listing=listing,
+                                     error="Invalid image format. Please upload JPG, PNG, GIF, or WEBP.")
+            
+            # Save image file
+            upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+            os.makedirs(upload_folder, exist_ok=True)
+            
+            # Generate unique filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = secure_filename(image_file.filename)
+            filename = f"{timestamp}_{filename}"
+            filepath = os.path.join(upload_folder, filename)
+            image_file.save(filepath)
+            image_filename = filename
+        
+        # Geocode the location to get coordinates
+        latitude = None
+        longitude = None
+        geocode_result = geocode_location(location)
+        if geocode_result:
+            latitude, longitude, formatted_location = geocode_result
+        
+        # Update the listing
+        try:
+            updated_listing = update_listing(
+                db,
+                listing_id=listing_id,
+                title=title,
+                description=description,
+                category=category,
+                size=size,
+                condition=condition,
+                location=location,
+                image_filename=image_filename,
+                latitude=latitude,
+                longitude=longitude
+            )
+            
+            if updated_listing:
+                flash("Listing updated successfully!", "success")
+                return redirect(url_for("main.view_listing", listing_id=listing_id))
+            else:
+                flash("Failed to update listing. Please try again.", "error")
+                return render_template("edit_listing.html", 
+                                     username=username,
+                                     listing=listing,
+                                     error="Failed to update listing. Please try again.")
+        except Exception as e:
+            print(f"ERROR updating listing: {e}")
+            flash(f"Error updating listing: {str(e)}", "error")
+            return render_template("edit_listing.html", 
+                                 username=username,
+                                 listing=listing,
+                                 error=f"Error updating listing: {str(e)}")
+    
+    # GET request - show edit form
+    unread_count = 0
+    if db is not None:
+        unread_count = get_unread_count(db, username)
+    
+    return render_template("edit_listing.html", username=username, listing=listing, unread_count=unread_count)
+
+# Delete listing route (requires authentication and ownership)
+@main.route("/listing/<listing_id>/delete", methods=["POST"])
+def delete_listing_route(listing_id):
+    username = session.get("username")
+    
+    # Require authentication
+    if not username:
+        flash("Please log in to delete a listing.", "error")
+        return redirect(url_for("main.login"))
+    
+    db = getattr(current_app, "mongo_db", None)
+    listing = get_listing_by_id(db, listing_id)
+    
+    if not listing:
+        flash("Listing not found.", "error")
+        return redirect(url_for("main.home"))
+    
+    # Check ownership
+    if listing.user_id != username:
+        flash("You can only delete your own listings.", "error")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
+    
+    try:
+        success = delete_listing(db, listing_id)
+        if success:
+            flash("Listing deleted successfully!", "success")
+            return redirect(url_for("main.my_listings"))
+        else:
+            flash("Failed to delete listing. Please try again.", "error")
+            return redirect(url_for("main.view_listing", listing_id=listing_id))
+    except Exception as e:
+        print(f"ERROR deleting listing: {e}")
+        flash(f"Error deleting listing: {str(e)}", "error")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
 
 # Serve uploaded images
 @main.route("/uploads/<filename>")

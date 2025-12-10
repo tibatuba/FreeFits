@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages - FreeFits</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1 class="site-logo">
+                <a href="{{ url_for('main.home') }}" class="logo-link">
+                    <img src="{{ url_for('static', filename='images/headerlogo.png') }}" 
+                         alt="FreeFits Logo" 
+                         class="logo-img">
+                </a>
+            </h1>
+            <nav class="user-nav">
+                {% if username %}
+                    <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.messages') }}" class="nav-link messages-link">
+                        Messages
+                        {% if unread_count and unread_count > 0 %}
+                            <span class="unread-badge">{{ unread_count }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{{ url_for('main.my_listings') }}" class="nav-link">My Listings</a>
+                    <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
+                    <a href="{{ url_for('main.register') }}" class="nav-link">Register</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="messages-page">
+        <div class="messages-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="messages-header">
+                <h2>Messages</h2>
+                <a href="{{ url_for('main.home') }}" class="back-to-home">← Back to Home</a>
+            </div>
+
+            <div class="messages-layout">
+                <!-- Conversations List -->
+                <div class="conversations-sidebar">
+                    <h3>Conversations</h3>
+                    {% if conversations %}
+                        <div class="conversations-list">
+                            {% for conv in conversations %}
+                                {% set other_user = conv.receiver_username if conv.sender_username == username else conv.sender_username %}
+                                <a href="{{ url_for('main.messages', conversation_id=conv.conversation_id) }}" 
+                                   class="conversation-item {% if conversation_id == conv.conversation_id %}active{% endif %}">
+                                    <div class="conversation-preview">
+                                        <div class="conversation-user">{{ other_user }}</div>
+                                        <div class="conversation-message">{{ conv.content[:50] }}{% if conv.content|length > 50 %}...{% endif %}</div>
+                                        <div class="conversation-time">{{ conv.created_at.strftime('%b %d, %Y %I:%M %p') if conv.created_at else '' }}</div>
+                                    </div>
+                                    {% if conv.receiver_username == username and not conv.is_read %}
+                                        <span class="unread-indicator"></span>
+                                    {% endif %}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="no-conversations">
+                            <p>No conversations yet.</p>
+                            <p>Start messaging sellers or buyers from listing pages!</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Conversation View -->
+                <div class="conversation-view">
+                    {% if conversation_id and other_user %}
+                        <div class="conversation-header">
+                            <h3>Conversation with {{ other_user }}</h3>
+                            {% if listing %}
+                                <div class="listing-reference">
+                                    <a href="{{ url_for('main.view_listing', listing_id=listing.id) }}" class="listing-link">
+                                        📦 {{ listing.title }}
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="messages-list" id="messages-list">
+                            {% for msg in messages %}
+                                <div class="message-item {% if msg.sender_username == username %}sent{% else %}received{% endif %}">
+                                    <div class="message-content">
+                                        <div class="message-text">{{ msg.content }}</div>
+                                        <div class="message-time">{{ msg.created_at.strftime('%b %d, %I:%M %p') if msg.created_at else '' }}</div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="message-input-container">
+                            <form action="{{ url_for('main.send_message') }}" method="POST" class="message-form">
+                                <input type="hidden" name="conversation_id" value="{{ conversation_id }}">
+                                <input type="hidden" name="receiver_username" value="{{ other_user }}">
+                                {% if listing %}
+                                    <input type="hidden" name="listing_id" value="{{ listing.id }}">
+                                {% endif %}
+                                <div class="input-group">
+                                    <input type="text" name="content" placeholder="Type your message..." required autofocus>
+                                    <button type="submit" class="send-btn">Send</button>
+                                </div>
+                            </form>
+                        </div>
+                    {% else %}
+                        <div class="no-conversation-selected">
+                            <div class="empty-state">
+                                <h3>Select a conversation</h3>
+                                <p>Choose a conversation from the list to start messaging.</p>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; padding: 1.25rem 0;">
+            <span class="footer logo">
+                <img src="{{ url_for('static', filename='images/footerlogo-modified (1).png') }}"
+                     alt="FreeFits Footer Logo"
+                     class="footer-logo-img"
+                     style="width: 45px; height: auto; object-fit: contain;">
+            </span>
+            <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
+        </div>
+    </footer>
+
+    <script>
+        // Auto-scroll to bottom of messages when page loads
+        window.addEventListener('DOMContentLoaded', function() {
+            const messagesList = document.getElementById('messages-list');
+            if (messagesList) {
+                messagesList.scrollTop = messagesList.scrollHeight;
+            }
+        });
+
+        // Auto-scroll after sending a message
+        document.querySelector('.message-form')?.addEventListener('submit', function() {
+            setTimeout(function() {
+                const messagesList = document.getElementById('messages-list');
+                if (messagesList) {
+                    messagesList.scrollTop = messagesList.scrollHeight;
+                }
+            }, 100);
+        });
+    </script>
+</body>
+</html>
+

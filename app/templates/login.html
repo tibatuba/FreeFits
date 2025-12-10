@@ -8,49 +8,71 @@
 </head>
 <body>
     <header>
-        <h1><a href="{{ url_for('main.home') }}" style="text-decoration: none; color: inherit;">FreeFits</a></h1>
+        <div class="header-content">
+            <h1 class="site-logo">
+                <a href="{{ url_for('main.home') }}" class="logo-link">
+                    <img src="{{ url_for('static', filename='images/headerlogo.png') }}" 
+                         alt="FreeFits Logo" 
+                         class="logo-img">
+                </a>
+            </h1>
+            <nav class="user-nav">
+                <a href="{{ url_for('main.home') }}" class="nav-link">Home</a>
+                <a href="{{ url_for('main.register') }}" class="nav-link">Register</a>
+            </nav>
+        </div>
     </header>
 
     <main>
-        <h2>Welcome Back!</h2>
-        <p class="subtitle">Sign in to your FreeFits account</p>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        {% if error %}
-            <div class="error-message">{{ error }}</div>
-        {% endif %}
-        
-        <form action="{{ url_for('main.login') }}" method="post">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" placeholder="Enter your Username" required>
-
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" placeholder="Enter your Password" required>
-
-            <div class="wrap">
-                <button type="submit">Login</button>
+        <div class="auth-container">
+            <div class="auth-header">
+                <h2>Welcome Back!</h2>
+                <p class="subtitle">Sign in to your FreeFits account</p>
             </div>
-        </form>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
 
-        <p>Not registered?
-            <a href="{{ url_for('main.register') }}" style="text-decoration: none;">Create an account</a>
-        </p>
-        
-        <p style="text-align: center; margin-top: 1.5rem;">
-            <a href="{{ url_for('main.home') }}" style="text-decoration: none; color: #2d5a2d; font-weight: 500;">← Back to Home</a>
-        </p>
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <form action="{{ url_for('main.login') }}" method="post" class="auth-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Enter your username" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                </div>
+
+                <button type="submit" class="auth-btn">Sign In</button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Not registered? <a href="{{ url_for('main.register') }}">Create an account</a></p>
+                <p class="back-link">
+                    <a href="{{ url_for('main.home') }}">← Back to Home</a>
+                </p>
+            </div>
+        </div>
     </main>
 
     <footer>
-        <div class="footer-content">
-            <span class="sloth-emoji">🦥</span>
+        <div class="footer-content" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; padding: 1.25rem 0;">
+            <span class="footer logo">
+                <img src="{{ url_for('static', filename='images/footerlogo-modified (1).png') }}"
+                     alt="FreeFits Footer Logo"
+                     class="footer-logo-img"
+                     style="width: 45px; height: auto; object-fit: contain;">
+            </span>
             <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
         </div>
     </footer>
