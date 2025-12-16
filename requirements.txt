@@ -3,3 +3,4 @@ Werkzeug==2.3.7
 python-dotenv==1.0.0
 pymongo==4.7.2
 requests==2.31.0
+boto3==1.34.0

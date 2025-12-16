@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, update_listing, delete_listing, get_listings_by_user, create_message, get_conversation_messages, get_user_conversations, get_or_create_conversation_id, mark_messages_as_read, get_unread_count
 from app.geocoding import geocode_location, geocode_postal_code
+from app.image_validation import validate_clothing_image, validate_clothing_image_api4ai, validate_clothing_image_rekognition
 
 main = Blueprint("main", __name__)
 
@@ -272,6 +273,16 @@ def create_listing_page():
                                  username=username,
                                  error="Invalid image format. Please upload JPG, PNG, GIF, or WEBP.")
         
+        # Check file size (10MB limit)
+        image_file.seek(0, os.SEEK_END)  # Seek to end
+        file_size = image_file.tell()  # Get file size
+        image_file.seek(0)  # Reset to beginning
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+        if file_size > MAX_FILE_SIZE:
+            return render_template("create_listing.html",
+                                 username=username,
+                                 error=f"Image file is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.1f}MB.")
+        
         # Save image file
         upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
         os.makedirs(upload_folder, exist_ok=True)
@@ -282,6 +293,50 @@ def create_listing_page():
         filename = f"{timestamp}_{filename}"
         filepath = os.path.join(upload_folder, filename)
         image_file.save(filepath)
+        
+        # Validate that the image contains clothing items
+        from config import get_config
+        config = get_config()
+        validation_api = config.IMAGE_VALIDATION_API or "rekognition"
+        
+        is_valid = True
+        error_message = None
+        
+        if validation_api == "rekognition":
+            # Use AWS Rekognition (RECOMMENDED - reliable, free tier, part of AWS)
+            aws_key = config.AWS_ACCESS_KEY_ID
+            aws_secret = config.AWS_SECRET_ACCESS_KEY
+            aws_region = config.AWS_REGION
+            if aws_key and aws_secret:
+                is_valid, error_message = validate_clothing_image_rekognition(filepath, aws_key, aws_secret, aws_region)
+            else:
+                print("WARNING: AWS credentials not configured. Skipping image validation.")
+        elif validation_api == "api4ai":
+            # Use api4ai Fashion API
+            api4ai_key = config.API4AI_API_KEY
+            if api4ai_key:
+                is_valid, error_message = validate_clothing_image_api4ai(filepath, api4ai_key)
+            else:
+                print("WARNING: api4ai API key not configured. Skipping image validation.")
+        else:
+            # Use Imagga API (fallback)
+            imagga_key = config.IMAGGA_API_KEY
+            imagga_secret = config.IMAGGA_API_SECRET
+            if imagga_key and imagga_secret:
+                is_valid, error_message = validate_clothing_image(filepath, imagga_key, imagga_secret)
+            else:
+                # If API credentials are not configured, log a warning but allow upload
+                print("WARNING: Imagga API credentials not configured. Skipping image validation.")
+        
+        if not is_valid:
+            # Delete the saved image file since validation failed
+            try:
+                os.remove(filepath)
+            except:
+                pass
+            return render_template("create_listing.html", 
+                                 username=username,
+                                 error=error_message or "Image validation failed. Please upload an image of a clothing item.")
         
         # Geocode the location to get coordinates
         latitude = None
@@ -540,6 +595,17 @@ def edit_listing(listing_id):
                                      listing=listing,
                                      error="Invalid image format. Please upload JPG, PNG, GIF, or WEBP.")
             
+            # Check file size (10MB limit)
+            image_file.seek(0, os.SEEK_END)  # Seek to end
+            file_size = image_file.tell()  # Get file size
+            image_file.seek(0)  # Reset to beginning
+            MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+            if file_size > MAX_FILE_SIZE:
+                return render_template("edit_listing.html",
+                                     username=username,
+                                     listing=listing,
+                                     error=f"Image file is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.1f}MB.")
+            
             # Save image file
             upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
             os.makedirs(upload_folder, exist_ok=True)
@@ -550,6 +616,52 @@ def edit_listing(listing_id):
             filename = f"{timestamp}_{filename}"
             filepath = os.path.join(upload_folder, filename)
             image_file.save(filepath)
+            
+            # Validate that the image contains clothing items
+            from config import get_config
+            config = get_config()
+            validation_api = config.IMAGE_VALIDATION_API or "rekognition"
+            
+            is_valid = True
+            error_message = None
+            
+            if validation_api == "rekognition":
+                # Use AWS Rekognition (RECOMMENDED - reliable, free tier, part of AWS)
+                aws_key = config.AWS_ACCESS_KEY_ID
+                aws_secret = config.AWS_SECRET_ACCESS_KEY
+                aws_region = config.AWS_REGION
+                if aws_key and aws_secret:
+                    is_valid, error_message = validate_clothing_image_rekognition(filepath, aws_key, aws_secret, aws_region)
+                else:
+                    print("WARNING: AWS credentials not configured. Skipping image validation.")
+            elif validation_api == "api4ai":
+                # Use api4ai Fashion API
+                api4ai_key = config.API4AI_API_KEY
+                if api4ai_key:
+                    is_valid, error_message = validate_clothing_image_api4ai(filepath, api4ai_key)
+                else:
+                    print("WARNING: api4ai API key not configured. Skipping image validation.")
+            else:
+                # Use Imagga API (fallback)
+                imagga_key = config.IMAGGA_API_KEY
+                imagga_secret = config.IMAGGA_API_SECRET
+                if imagga_key and imagga_secret:
+                    is_valid, error_message = validate_clothing_image(filepath, imagga_key, imagga_secret)
+                else:
+                    # If API credentials are not configured, log a warning but allow upload
+                    print("WARNING: Imagga API credentials not configured. Skipping image validation.")
+            
+            if not is_valid:
+                # Delete the saved image file since validation failed
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
+                return render_template("edit_listing.html", 
+                                     username=username,
+                                     listing=listing,
+                                     error=error_message or "Image validation failed. Please upload an image of a clothing item.")
+            
             image_filename = filename
         
         # Geocode the location to get coordinates
