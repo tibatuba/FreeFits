@@ -6,8 +6,40 @@ import os
 from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, update_listing, delete_listing, get_listings_by_user, create_message, get_conversation_messages, get_user_conversations, get_or_create_conversation_id, mark_messages_as_read, get_unread_count
 from app.geocoding import geocode_location, geocode_postal_code
 from app.image_validation import validate_clothing_image, validate_clothing_image_api4ai, validate_clothing_image_rekognition
+from app.s3_storage import upload_image_to_s3, get_s3_image_url, delete_image_from_s3, check_s3_configured
+import tempfile
 
 main = Blueprint("main", __name__)
+
+def get_image_url(image_key):
+    """
+    Helper function to get the URL for an image.
+    Checks if image is from S3 or filesystem and returns appropriate URL.
+    
+    Args:
+        image_key: Image filename/key (from database)
+    
+    Returns:
+        Image URL string
+    """
+    if not image_key:
+        return None
+    
+    # Check if it's an S3 key (not a filesystem path)
+    is_s3_image = not image_key.startswith('/') and 'uploads' not in image_key
+    
+    if is_s3_image:
+        try:
+            is_configured, _ = check_s3_configured()
+            if is_configured:
+                s3_url = get_s3_image_url(image_key, signed=False)
+                if s3_url:
+                    return s3_url
+        except Exception as e:
+            current_app.logger.warning(f"Error generating S3 URL: {e}")
+    
+    # Fallback to filesystem URL
+    return url_for('main.uploaded_file', filename=image_key)
 
 # Home route - Marketplace
 @main.route("/")
@@ -104,6 +136,12 @@ def home():
     else:
         listings = get_latest_listings(db)
     
+    # Generate image URLs for all listings (S3 or filesystem)
+    for listing in listings:
+        if listing.images and len(listing.images) > 0:
+            listing.image_url = get_image_url(listing.images[0])
+        else:
+            listing.image_url = None
     
     # Get unread message count if logged in
     unread_count = 0
@@ -220,12 +258,17 @@ def view_listing(listing_id):
         flash("Listing not found.", "error")
         return redirect(url_for("main.home"))
     
+    # Get image URL (S3 or filesystem)
+    image_url = None
+    if listing.images and len(listing.images) > 0:
+        image_url = get_image_url(listing.images[0])
+    
     # Get unread message count if logged in
     unread_count = 0
     if username and db is not None:
         unread_count = get_unread_count(db, username)
     
-    return render_template("listing_detail.html", listing=listing, username=username, unread_count=unread_count)
+    return render_template("listing_detail.html", listing=listing, username=username, unread_count=unread_count, image_url=image_url)
 
 # Create listing route (requires authentication)
 @main.route("/create", methods=["GET", "POST"])
@@ -283,60 +326,123 @@ def create_listing_page():
                                  username=username,
                                  error=f"Image file is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.1f}MB.")
         
-        # Save image file
-        upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
-        os.makedirs(upload_folder, exist_ok=True)
+        # Check if S3 is configured
+        use_s3 = True
+        s3_error = None
+        try:
+            is_configured, s3_error = check_s3_configured()
+            if not is_configured:
+                current_app.logger.warning(f"S3 not configured, falling back to filesystem: {s3_error}")
+                use_s3 = False
+        except Exception as e:
+            current_app.logger.warning(f"Error checking S3 configuration: {e}")
+            use_s3 = False
         
-        # Generate unique filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = secure_filename(image_file.filename)
-        filename = f"{timestamp}_{filename}"
-        filepath = os.path.join(upload_folder, filename)
-        image_file.save(filepath)
-        
-        # Validate that the image contains clothing items
-        from config import get_config
-        config = get_config()
-        validation_api = config.IMAGE_VALIDATION_API or "rekognition"
-        
-        is_valid = True
-        error_message = None
-        
-        if validation_api == "rekognition":
-            # Use AWS Rekognition (RECOMMENDED - reliable, free tier, part of AWS)
-            aws_key = config.AWS_ACCESS_KEY_ID
-            aws_secret = config.AWS_SECRET_ACCESS_KEY
-            aws_region = config.AWS_REGION
-            if aws_key and aws_secret:
-                is_valid, error_message = validate_clothing_image_rekognition(filepath, aws_key, aws_secret, aws_region)
+        # Save image temporarily for validation (Rekognition needs file path)
+        temp_filepath = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as temp_file:
+                image_file.save(temp_file.name)
+                temp_filepath = temp_file.name
+            
+            # Validate that the image contains clothing items
+            from config import get_config
+            config = get_config()
+            validation_api = config.IMAGE_VALIDATION_API or "rekognition"
+            
+            is_valid = True
+            error_message = None
+            
+            if validation_api == "rekognition":
+                # Use AWS Rekognition (RECOMMENDED - reliable, free tier, part of AWS)
+                aws_key = config.AWS_ACCESS_KEY_ID
+                aws_secret = config.AWS_SECRET_ACCESS_KEY
+                aws_region = config.AWS_REGION
+                if aws_key and aws_secret:
+                    is_valid, error_message = validate_clothing_image_rekognition(temp_filepath, aws_key, aws_secret, aws_region)
+                else:
+                    current_app.logger.warning("AWS credentials not configured. Skipping image validation.")
+            elif validation_api == "api4ai":
+                # Use api4ai Fashion API
+                api4ai_key = config.API4AI_API_KEY
+                if api4ai_key:
+                    is_valid, error_message = validate_clothing_image_api4ai(temp_filepath, api4ai_key)
+                else:
+                    current_app.logger.warning("api4ai API key not configured. Skipping image validation.")
             else:
-                print("WARNING: AWS credentials not configured. Skipping image validation.")
-        elif validation_api == "api4ai":
-            # Use api4ai Fashion API
-            api4ai_key = config.API4AI_API_KEY
-            if api4ai_key:
-                is_valid, error_message = validate_clothing_image_api4ai(filepath, api4ai_key)
-            else:
-                print("WARNING: api4ai API key not configured. Skipping image validation.")
-        else:
-            # Use Imagga API (fallback)
-            imagga_key = config.IMAGGA_API_KEY
-            imagga_secret = config.IMAGGA_API_SECRET
-            if imagga_key and imagga_secret:
-                is_valid, error_message = validate_clothing_image(filepath, imagga_key, imagga_secret)
-            else:
-                # If API credentials are not configured, log a warning but allow upload
-                print("WARNING: Imagga API credentials not configured. Skipping image validation.")
-        
-        if not is_valid:
-            # Delete the saved image file since validation failed
+                # Use Imagga API (fallback)
+                imagga_key = config.IMAGGA_API_KEY
+                imagga_secret = config.IMAGGA_API_SECRET
+                if imagga_key and imagga_secret:
+                    is_valid, error_message = validate_clothing_image(temp_filepath, imagga_key, imagga_secret)
+                else:
+                    # If API credentials are not configured, log a warning but allow upload
+                    current_app.logger.warning("Imagga API credentials not configured. Skipping image validation.")
+            
+            if not is_valid:
+                # Clean up temp file
+                try:
+                    if temp_filepath and os.path.exists(temp_filepath):
+                        os.remove(temp_filepath)
+                except:
+                    pass
+                return render_template("create_listing.html", 
+                                     username=username,
+                                     error=error_message or "Image validation failed. Please upload an image of a clothing item.")
+            
+            # Upload to S3 or save to filesystem
+            filename = None
+            if use_s3:
+                # Upload to S3 - read from temp file to avoid file handle issues
+                try:
+                    with open(temp_filepath, 'rb') as temp_file:
+                        success, s3_key, upload_error = upload_image_to_s3(temp_file)
+                    
+                    if success:
+                        filename = s3_key
+                        current_app.logger.info(f"Successfully uploaded image to S3: {s3_key}")
+                    else:
+                        # Upload failed, fallback to filesystem
+                        current_app.logger.warning(f"S3 upload failed: {upload_error}. Falling back to filesystem.")
+                        use_s3 = False
+                except Exception as e:
+                    current_app.logger.error(f"Error uploading to S3: {e}. Falling back to filesystem.")
+                    use_s3 = False
+            
+            if not use_s3:
+                # Fallback to filesystem storage - copy from temp file
+                upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+                os.makedirs(upload_folder, exist_ok=True)
+                
+                # Generate unique filename
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                original_filename = image_file.filename if hasattr(image_file, 'filename') else 'image'
+                filename = secure_filename(original_filename)
+                filename = f"{timestamp}_{filename}"
+                filepath = os.path.join(upload_folder, filename)
+                
+                # Copy from temp file to upload folder
+                import shutil
+                shutil.copy2(temp_filepath, filepath)
+            
+            # Clean up temp file
             try:
-                os.remove(filepath)
+                if temp_filepath and os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
             except:
                 pass
-            return render_template("create_listing.html", 
+                
+        except Exception as e:
+            # Clean up temp file on error
+            try:
+                if temp_filepath and os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
+            except:
+                pass
+            current_app.logger.error(f"Error processing image: {e}")
+            return render_template("create_listing.html",
                                  username=username,
-                                 error=error_message or "Image validation failed. Please upload an image of a clothing item.")
+                                 error=f"Error processing image: {str(e)}")
         
         # Geocode the location to get coordinates
         latitude = None
@@ -455,6 +561,13 @@ def my_listings():
     # Get all listings created by this user
     db = getattr(current_app, "mongo_db", None)
     user_listings = get_listings_by_user(db, username)
+    
+    # Generate image URLs for all listings (S3 or filesystem)
+    for listing in user_listings:
+        if listing.images and len(listing.images) > 0:
+            listing.image_url = get_image_url(listing.images[0])
+        else:
+            listing.image_url = None
     
     # Get unread message count
     unread_count = 0
@@ -606,63 +719,145 @@ def edit_listing(listing_id):
                                      listing=listing,
                                      error=f"Image file is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.1f}MB.")
             
-            # Save image file
-            upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
-            os.makedirs(upload_folder, exist_ok=True)
+            # Check if S3 is configured
+            use_s3 = True
+            try:
+                is_configured, s3_error = check_s3_configured()
+                if not is_configured:
+                    current_app.logger.warning(f"S3 not configured, falling back to filesystem: {s3_error}")
+                    use_s3 = False
+            except Exception as e:
+                current_app.logger.warning(f"Error checking S3 configuration: {e}")
+                use_s3 = False
             
-            # Generate unique filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = secure_filename(image_file.filename)
-            filename = f"{timestamp}_{filename}"
-            filepath = os.path.join(upload_folder, filename)
-            image_file.save(filepath)
-            
-            # Validate that the image contains clothing items
-            from config import get_config
-            config = get_config()
-            validation_api = config.IMAGE_VALIDATION_API or "rekognition"
-            
-            is_valid = True
-            error_message = None
-            
-            if validation_api == "rekognition":
-                # Use AWS Rekognition (RECOMMENDED - reliable, free tier, part of AWS)
-                aws_key = config.AWS_ACCESS_KEY_ID
-                aws_secret = config.AWS_SECRET_ACCESS_KEY
-                aws_region = config.AWS_REGION
-                if aws_key and aws_secret:
-                    is_valid, error_message = validate_clothing_image_rekognition(filepath, aws_key, aws_secret, aws_region)
+            # Save image temporarily for validation
+            temp_filepath = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as temp_file:
+                    image_file.save(temp_file.name)
+                    temp_filepath = temp_file.name
+                
+                # Validate that the image contains clothing items
+                from config import get_config
+                config = get_config()
+                validation_api = config.IMAGE_VALIDATION_API or "rekognition"
+                
+                is_valid = True
+                error_message = None
+                
+                if validation_api == "rekognition":
+                    # Use AWS Rekognition (RECOMMENDED - reliable, free tier, part of AWS)
+                    aws_key = config.AWS_ACCESS_KEY_ID
+                    aws_secret = config.AWS_SECRET_ACCESS_KEY
+                    aws_region = config.AWS_REGION
+                    if aws_key and aws_secret:
+                        is_valid, error_message = validate_clothing_image_rekognition(temp_filepath, aws_key, aws_secret, aws_region)
+                    else:
+                        current_app.logger.warning("AWS credentials not configured. Skipping image validation.")
+                elif validation_api == "api4ai":
+                    # Use api4ai Fashion API
+                    api4ai_key = config.API4AI_API_KEY
+                    if api4ai_key:
+                        is_valid, error_message = validate_clothing_image_api4ai(temp_filepath, api4ai_key)
+                    else:
+                        current_app.logger.warning("api4ai API key not configured. Skipping image validation.")
                 else:
-                    print("WARNING: AWS credentials not configured. Skipping image validation.")
-            elif validation_api == "api4ai":
-                # Use api4ai Fashion API
-                api4ai_key = config.API4AI_API_KEY
-                if api4ai_key:
-                    is_valid, error_message = validate_clothing_image_api4ai(filepath, api4ai_key)
-                else:
-                    print("WARNING: api4ai API key not configured. Skipping image validation.")
-            else:
-                # Use Imagga API (fallback)
-                imagga_key = config.IMAGGA_API_KEY
-                imagga_secret = config.IMAGGA_API_SECRET
-                if imagga_key and imagga_secret:
-                    is_valid, error_message = validate_clothing_image(filepath, imagga_key, imagga_secret)
-                else:
-                    # If API credentials are not configured, log a warning but allow upload
-                    print("WARNING: Imagga API credentials not configured. Skipping image validation.")
-            
-            if not is_valid:
-                # Delete the saved image file since validation failed
+                    # Use Imagga API (fallback)
+                    imagga_key = config.IMAGGA_API_KEY
+                    imagga_secret = config.IMAGGA_API_SECRET
+                    if imagga_key and imagga_secret:
+                        is_valid, error_message = validate_clothing_image(temp_filepath, imagga_key, imagga_secret)
+                    else:
+                        # If API credentials are not configured, log a warning but allow upload
+                        current_app.logger.warning("Imagga API credentials not configured. Skipping image validation.")
+                
+                if not is_valid:
+                    # Clean up temp file
+                    try:
+                        if temp_filepath and os.path.exists(temp_filepath):
+                            os.remove(temp_filepath)
+                    except:
+                        pass
+                    return render_template("edit_listing.html", 
+                                         username=username,
+                                         listing=listing,
+                                         error=error_message or "Image validation failed. Please upload an image of a clothing item.")
+                
+                # Upload to S3 or save to filesystem
+                if use_s3:
+                    # Upload to S3 - read from temp file to avoid file handle issues
+                    try:
+                        with open(temp_filepath, 'rb') as temp_file:
+                            success, s3_key, upload_error = upload_image_to_s3(temp_file)
+                        
+                        if success:
+                            image_filename = s3_key
+                            current_app.logger.info(f"Successfully uploaded image to S3: {s3_key}")
+                            
+                            # Delete old image from S3 if it exists
+                            if listing.images and len(listing.images) > 0:
+                                old_image_key = listing.images[0]
+                                # Check if old image is from S3 (not a filesystem path)
+                                if not old_image_key.startswith('/') and 'uploads' not in old_image_key:
+                                    try:
+                                        delete_image_from_s3(old_image_key)
+                                    except:
+                                        pass
+                        else:
+                            # Upload failed, fallback to filesystem
+                            current_app.logger.warning(f"S3 upload failed: {upload_error}. Falling back to filesystem.")
+                            use_s3 = False
+                    except Exception as e:
+                        current_app.logger.error(f"Error uploading to S3: {e}. Falling back to filesystem.")
+                        use_s3 = False
+                
+                if not use_s3:
+                    # Fallback to filesystem storage - copy from temp file
+                    upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+                    os.makedirs(upload_folder, exist_ok=True)
+                    
+                    # Generate unique filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    original_filename = image_file.filename if hasattr(image_file, 'filename') else 'image'
+                    filename = secure_filename(original_filename)
+                    filename = f"{timestamp}_{filename}"
+                    filepath = os.path.join(upload_folder, filename)
+                    
+                    # Copy from temp file to upload folder
+                    import shutil
+                    shutil.copy2(temp_filepath, filepath)
+                    
+                    # Delete old image from filesystem if it exists
+                    if listing.images and len(listing.images) > 0:
+                        old_filename = listing.images[0]
+                        old_filepath = os.path.join(upload_folder, old_filename)
+                        try:
+                            if os.path.exists(old_filepath):
+                                os.remove(old_filepath)
+                        except:
+                            pass
+                    
+                    image_filename = filename
+                
+                # Clean up temp file
                 try:
-                    os.remove(filepath)
+                    if temp_filepath and os.path.exists(temp_filepath):
+                        os.remove(temp_filepath)
                 except:
                     pass
-                return render_template("edit_listing.html", 
+                    
+            except Exception as e:
+                # Clean up temp file on error
+                try:
+                    if temp_filepath and os.path.exists(temp_filepath):
+                        os.remove(temp_filepath)
+                except:
+                    pass
+                current_app.logger.error(f"Error processing image: {e}")
+                return render_template("edit_listing.html",
                                      username=username,
                                      listing=listing,
-                                     error=error_message or "Image validation failed. Please upload an image of a clothing item.")
-            
-            image_filename = filename
+                                     error=f"Error processing image: {str(e)}")
         
         # Geocode the location to get coordinates
         latitude = None
@@ -709,7 +904,17 @@ def edit_listing(listing_id):
     if db is not None:
         unread_count = get_unread_count(db, username)
     
-    return render_template("edit_listing.html", username=username, listing=listing, unread_count=unread_count)
+    # Get image URL for display
+    image_url = None
+    if listing.images and len(listing.images) > 0:
+        image_url = get_image_url(listing.images[0])
+    
+    # Get unread message count
+    unread_count = 0
+    if db is not None:
+        unread_count = get_unread_count(db, username)
+    
+    return render_template("edit_listing.html", username=username, listing=listing, unread_count=unread_count, image_url=image_url)
 
 # Delete listing route (requires authentication and ownership)
 @main.route("/listing/<listing_id>/delete", methods=["POST"])
@@ -734,6 +939,49 @@ def delete_listing_route(listing_id):
         return redirect(url_for("main.view_listing", listing_id=listing_id))
     
     try:
+        # Delete image from S3 or filesystem
+        if listing.images and len(listing.images) > 0:
+            image_key = listing.images[0]
+            
+            # Check if S3 is configured
+            try:
+                is_configured, _ = check_s3_configured()
+                if is_configured:
+                    # Check if image is from S3 (not a filesystem path)
+                    if not image_key.startswith('/') and 'uploads' not in image_key:
+                        # Delete from S3
+                        delete_success, delete_error = delete_image_from_s3(image_key)
+                        if not delete_success:
+                            current_app.logger.warning(f"Failed to delete image from S3: {delete_error}")
+                    else:
+                        # Delete from filesystem
+                        upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+                        filepath = os.path.join(upload_folder, image_key)
+                        try:
+                            if os.path.exists(filepath):
+                                os.remove(filepath)
+                        except Exception as e:
+                            current_app.logger.warning(f"Failed to delete image from filesystem: {e}")
+                else:
+                    # S3 not configured, delete from filesystem
+                    upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+                    filepath = os.path.join(upload_folder, image_key)
+                    try:
+                        if os.path.exists(filepath):
+                            os.remove(filepath)
+                    except Exception as e:
+                        current_app.logger.warning(f"Failed to delete image from filesystem: {e}")
+            except Exception as e:
+                current_app.logger.warning(f"Error checking S3 configuration during delete: {e}")
+                # Try filesystem delete as fallback
+                upload_folder = os.path.join(current_app.root_path, 'static', 'img', 'uploads')
+                filepath = os.path.join(upload_folder, image_key)
+                try:
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                except:
+                    pass
+        
         success = delete_listing(db, listing_id)
         if success:
             flash("Listing deleted successfully!", "success")
@@ -742,7 +990,7 @@ def delete_listing_route(listing_id):
             flash("Failed to delete listing. Please try again.", "error")
             return redirect(url_for("main.view_listing", listing_id=listing_id))
     except Exception as e:
-        print(f"ERROR deleting listing: {e}")
+        current_app.logger.error(f"ERROR deleting listing: {e}")
         flash(f"Error deleting listing: {str(e)}", "error")
         return redirect(url_for("main.view_listing", listing_id=listing_id))
 
@@ -750,3 +998,70 @@ def delete_listing_route(listing_id):
 @main.route("/uploads/<filename>")
 def uploaded_file(filename):
     return send_from_directory(os.path.join(current_app.root_path, 'static', 'img', 'uploads'), filename)
+
+# Admin route to delete all listings except the latest one
+@main.route("/admin/delete-old-listings", methods=["GET", "POST"])
+def delete_old_listings():
+    username = session.get("username")
+    
+    # Require authentication
+    if not username:
+        flash("Please log in to access admin functions.", "error")
+        return redirect(url_for("main.login"))
+    
+    db = getattr(current_app, "mongo_db", None)
+    if db is None:
+        flash("Database connection not available.", "error")
+        return redirect(url_for("main.home"))
+    
+    collection = db["listings"]
+    
+    if request.method == "POST":
+        confirm = request.form.get("confirm")
+        if confirm != "DELETE":
+            flash("Deletion cancelled. Type 'DELETE' to confirm.", "warning")
+            return redirect(url_for("main.delete_old_listings"))
+        
+        # Get all listings sorted by created_at (newest first)
+        all_listings = list(collection.find({}).sort("created_at", -1))
+        
+        if len(all_listings) <= 1:
+            flash("No listings to delete. Only one or zero listings found.", "info")
+            return redirect(url_for("main.home"))
+        
+        # Keep the latest one
+        latest_listing = all_listings[0]
+        listings_to_delete = all_listings[1:]
+        
+        # Delete all except the latest
+        deleted_count = 0
+        for listing in listings_to_delete:
+            try:
+                result = collection.delete_one({'_id': listing.get('_id')})
+                if result.deleted_count > 0:
+                    deleted_count += 1
+            except Exception as e:
+                current_app.logger.error(f"Error deleting listing {listing.get('_id')}: {e}")
+        
+        flash(f"Successfully deleted {deleted_count} listing(s). Kept: {latest_listing.get('title')}", "success")
+        return redirect(url_for("main.home"))
+    
+    # GET request - show confirmation page
+    all_listings = list(collection.find({}).sort("created_at", -1))
+    
+    if len(all_listings) == 0:
+        flash("No listings found.", "info")
+        return redirect(url_for("main.home"))
+    
+    if len(all_listings) == 1:
+        flash("Only one listing found. Nothing to delete.", "info")
+        return redirect(url_for("main.home"))
+    
+    latest_listing = all_listings[0]
+    listings_to_delete = all_listings[1:]
+    
+    return render_template("delete_old_listings.html",
+                         username=username,
+                         latest_listing=latest_listing,
+                         listings_to_delete=listings_to_delete,
+                         total_count=len(all_listings))

@@ -15,6 +15,9 @@ class Config:
     AWS_REGION = os.getenv("AWS_REGION", "us-east-1")  # Default region
     # Set to 'rekognition' for AWS Rekognition (recommended), 'api4ai', or 'imagga'
     IMAGE_VALIDATION_API = os.getenv("IMAGE_VALIDATION_API", "rekognition")  # Default to AWS Rekognition
+    # AWS S3 Configuration for image storage
+    AWS_S3_BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME", "")
+    AWS_S3_REGION = os.getenv("AWS_S3_REGION", "")  # Optional, defaults to AWS_REGION if not set
 
 
 def get_config():

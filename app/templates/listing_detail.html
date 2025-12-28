@@ -52,7 +52,9 @@
             <div class="detail-content">
                 <div class="detail-image-section">
                     <div class="detail-image">
-                        {% if listing.images and listing.images|length > 0 %}
+                        {% if image_url %}
+                            <img src="{{ image_url }}" alt="{{ listing.title }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 16px;">
+                        {% elif listing.images and listing.images|length > 0 %}
                             <img src="{{ url_for('main.uploaded_file', filename=listing.images[0]) }}" alt="{{ listing.title }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 16px;">
                         {% else %}
                             <div class="placeholder-image">📷</div>

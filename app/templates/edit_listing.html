@@ -42,7 +42,12 @@
 
             <form action="{{ url_for('main.edit_listing', listing_id=listing.id) }}" method="POST" class="create-form" enctype="multipart/form-data">
                 <label for="image">Item Image</label>
-                {% if listing.images and listing.images|length > 0 %}
+                {% if image_url %}
+                    <div style="margin-bottom: 0.5rem;">
+                        <img src="{{ image_url }}" alt="Current image" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;">
+                        <p style="color: #666; font-size: 0.85rem; margin-top: 0.25rem;">Current image</p>
+                    </div>
+                {% elif listing.images and listing.images|length > 0 %}
                     <div style="margin-bottom: 0.5rem;">
                         <img src="{{ url_for('main.uploaded_file', filename=listing.images[0]) }}" alt="Current image" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;">
                         <p style="color: #666; font-size: 0.85rem; margin-top: 0.25rem;">Current image</p>
