@@ -1,0 +1,18 @@
+[Unit]
+Description=FreeFits Flask Application
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/FreeFits
+Environment="PATH=/home/ubuntu/FreeFits/venv/bin"
+EnvironmentFile=/home/ubuntu/FreeFits/.env
+ExecStart=/home/ubuntu/FreeFits/venv/bin/gunicorn --config gunicorn_config.py run:app
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+
