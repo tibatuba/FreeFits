@@ -30,3 +30,4 @@ sudo systemctl status freefits --no-pager
 echo "🎉 Deployment complete!"
 
 
+
