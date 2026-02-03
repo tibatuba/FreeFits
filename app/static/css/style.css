@@ -1508,7 +1508,6 @@ label[for="location"] {
     transition: all 0.3s ease;
     text-decoration: none;
     display: inline-block;
-    width: 100%;
     text-align: center;
     box-shadow: 0 4px 15px rgba(26, 77, 26, 0.3);
 }
@@ -1968,8 +1967,6 @@ label[for="location"] {
     }
 
     .contact-btn-large {
-        width: 100%;
-        max-width: 100%;
         padding: 1rem 1.5rem;
         font-size: 1rem;
         display: block;
