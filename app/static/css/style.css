@@ -1491,7 +1491,6 @@ label[for="location"] {
 }
 
 .detail-actions > a {
-    width: 75%;
     display: block;
     text-align: center;
 }
@@ -1945,7 +1944,6 @@ label[for="location"] {
     }
 
     .detail-actions > a {
-        width: 75%;
         display: block;
         text-align: center;
     }
@@ -1955,11 +1953,6 @@ label[for="location"] {
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
-    }
-
-    .detail-actions > div > a,
-    .detail-actions > div > form {
-        width: 75%;
     }
 
     .detail-actions > div > form button {
