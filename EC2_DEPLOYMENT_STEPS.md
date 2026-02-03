@@ -404,6 +404,172 @@ When you make changes to your code:
 
 ---
 
+## 👥 Partner Access Guide
+
+If you have a partner working on this project, here are ways they can access the EC2 instance:
+
+### Option 1: Share SSH Access (Recommended for Development)
+
+**Method A: Share the .pem Key File (Simple)**
+
+1. **You (owner)**: Send your partner the `freefits-key.pem` file securely (via encrypted email, password-protected zip, or secure file sharing)
+2. **Your partner** (on Windows):
+   ```powershell
+   # 1. Save the .pem file to Downloads folder
+   # 2. Set permissions
+   cd C:\Users\PARTNER_USERNAME\Downloads
+   icacls.exe freefits-key.pem /inheritance:r
+   icacls.exe freefits-key.pem /grant:r "$($env:USERNAME):(R)"
+   
+   # 3. Connect (replace with actual IP)
+   ssh -i freefits-key.pem ubuntu@3.229.118.71
+   ```
+
+**Method B: Add Partner's SSH Public Key (More Secure)**
+
+1. **Your partner** generates SSH key pair (if they don't have one):
+   ```powershell
+   # On partner's Windows machine
+   ssh-keygen -t rsa -b 4096 -C "partner@email.com"
+   # Save to default location: C:\Users\PARTNER_USERNAME\.ssh\id_rsa
+   ```
+
+2. **Your partner** sends you their **public key** (content of `id_rsa.pub` file)
+
+3. **You** add it to EC2 instance:
+   ```bash
+   # SSH into EC2 as you normally do
+   ssh -i freefits-key.pem ubuntu@3.229.118.71
+   
+   # Add partner's public key
+   echo "PARTNER_PUBLIC_KEY_CONTENT" >> ~/.ssh/authorized_keys
+   ```
+
+4. **Your partner** can now connect:
+   ```powershell
+   ssh -i C:\Users\PARTNER_USERNAME\.ssh\id_rsa ubuntu@3.229.118.71
+   ```
+
+### Option 2: Web Application Access (No SSH Needed)
+
+Your partner can access the web application directly:
+- **URL**: `http://3.229.118.71` (or your current public IP)
+- **What they can do**: View the site, test features, use the application
+- **What they CAN'T do**: Modify code, deploy changes, access server files
+
+### Option 3: AWS Console Access + SSH (Recommended for Full Access)
+
+This gives your partner both AWS Console access AND SSH access to the EC2 instance.
+
+**Step 1: Create IAM User for Partner**
+
+1. **You (AWS account owner)**:
+   - Go to AWS Console → IAM → Users
+   - Click "Create user"
+   - Username: `freefits-partner`
+   - Select "Provide user access to the AWS Management Console"
+   - Create a password and send it securely
+   - Attach policy: `AmazonEC2FullAccess` (or create custom policy with limited permissions)
+   - **Send partner**: AWS Console login URL, username, and password
+
+**Step 2: Set Up SSH Access for Partner**
+
+After creating the IAM user, you still need to give them SSH access. Choose one method:
+
+**Method A: Share Your .pem Key (Quickest)**
+
+1. **You**: Send `freefits-key.pem` file to partner securely (encrypted email, password-protected zip, etc.)
+2. **Your partner** (on Windows):
+   ```powershell
+   # 1. Save the .pem file to Downloads folder
+   # 2. Set permissions
+   cd C:\Users\PARTNER_USERNAME\Downloads
+   icacls.exe freefits-key.pem /inheritance:r
+   icacls.exe freefits-key.pem /grant:r "$($env:USERNAME):(R)"
+   
+   # 3. Connect (replace with actual IP)
+   ssh -i freefits-key.pem ubuntu@3.229.118.71
+   ```
+
+**Method B: Add Partner's SSH Public Key (More Secure)**
+
+1. **Your partner** generates SSH key pair (if they don't have one):
+   ```powershell
+   # On partner's Windows machine
+   ssh-keygen -t rsa -b 4096 -C "partner@email.com"
+   # Press Enter to save to default: C:\Users\PARTNER_USERNAME\.ssh\id_rsa
+   # Press Enter twice for no passphrase (or set one for extra security)
+   ```
+
+2. **Your partner** sends you their **public key**:
+   ```powershell
+   # Partner runs this and sends you the output:
+   cat C:\Users\PARTNER_USERNAME\.ssh\id_rsa.pub
+   # Or opens the file: C:\Users\PARTNER_USERNAME\.ssh\id_rsa.pub
+   ```
+
+3. **You** add partner's key to EC2:
+   ```bash
+   # SSH into EC2 as you normally do
+   ssh -i freefits-key.pem ubuntu@3.229.118.71
+   
+   # Add partner's public key (paste the key they sent you)
+   echo "PARTNER_PUBLIC_KEY_CONTENT_HERE" >> ~/.ssh/authorized_keys
+   
+   # Verify it was added
+   cat ~/.ssh/authorized_keys
+   ```
+
+4. **Your partner** can now connect:
+   ```powershell
+   ssh -i C:\Users\PARTNER_USERNAME\.ssh\id_rsa ubuntu@3.229.118.71
+   ```
+
+**Step 3: Update Security Group (If Needed)**
+
+If your security group only allows SSH from "My IP", add partner's IP:
+
+1. **You**: Go to AWS Console → EC2 → Security Groups
+2. Select your security group (`freefits-sg`)
+3. Edit inbound rules → Add rule:
+   - Type: SSH (22)
+   - Source: Partner's IP address (ask them for it, or use "Anywhere" for testing)
+   - Description: "Partner SSH access"
+
+**Now your partner has:**
+- ✅ AWS Console access (can view/manage EC2)
+- ✅ SSH access (can deploy code, check logs, etc.)
+
+### Option 4: Update Security Group for Partner's IP
+
+If partner's IP is blocked:
+
+1. **You**: Go to AWS Console → EC2 → Security Groups
+2. Select your security group (`freefits-sg`)
+3. Edit inbound rules → Add rule:
+   - Type: SSH (22)
+   - Source: Partner's IP address (ask them for it)
+   - Description: "Partner SSH access"
+
+### Recommended Workflow for Team Development:
+
+1. **Both partners develop locally** on their own machines
+2. **Use Git/GitHub** to share code changes
+3. **One person deploys** to EC2 (or take turns)
+4. **Both test** the deployed application via web browser
+5. **Both can SSH** if needed for debugging (using shared key or individual keys)
+
+### Security Best Practices:
+
+- ✅ **DO**: Share .pem file via encrypted/secure method
+- ✅ **DO**: Use individual SSH keys (Method B) for better security
+- ✅ **DO**: Restrict SSH access to specific IPs in security group
+- ❌ **DON'T**: Commit .pem files to GitHub
+- ❌ **DON'T**: Share AWS root account credentials
+- ❌ **DON'T**: Leave SSH open to "Anywhere" (0.0.0.0/0) in production
+
+---
+
 ## 🎉 You're Done!
 
 Your application should now be live at: `http://YOUR_EC2_PUBLIC_IP`

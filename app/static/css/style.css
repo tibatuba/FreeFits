@@ -1482,9 +1482,6 @@ label[for="location"] {
 .detail-actions {
     margin-top: 1rem;
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
 }
 
 .detail-actions form {
@@ -1496,12 +1493,6 @@ label[for="location"] {
 .detail-actions > a {
     width: 100%;
     display: block;
-    text-align: center;
-}
-
-.detail-actions > a.contact-btn-large {
-    display: block;
-    margin: 0 auto;
     text-align: center;
 }
 
@@ -1525,17 +1516,6 @@ label[for="location"] {
 .contact-btn-large:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(26, 77, 26, 0.4);
-}
-
-/* Desktop: contact button not full-width, so it doesn't look awkward */
-@media (min-width: 769px) {
-    .detail-actions .contact-btn-large,
-    .detail-actions form .contact-btn-large {
-        width: auto;
-        min-width: 220px;
-        max-width: 320px;
-        display: inline-block;
-    }
 }
 
 .detail-footer {
@@ -1961,26 +1941,13 @@ label[for="location"] {
         width: 100%;
         margin: 0;
         padding: 0;
-        display: block;
-    }
-
-    .detail-actions form button.contact-btn-large {
-        width: 100%;
-        display: block;
-        box-sizing: border-box;
+        display: flex;
+        justify-content: center;
     }
 
     .detail-actions > a {
         width: 100%;
         display: block;
-        text-align: center;
-        box-sizing: border-box;
-    }
-
-    .detail-actions > a.contact-btn-large {
-        display: block;
-        width: 100%;
-        margin: 0;
         text-align: center;
     }
 
@@ -2001,11 +1968,11 @@ label[for="location"] {
     }
 
     .contact-btn-large {
-        width: 100% !important;
+        width: 100%;
         max-width: 100%;
         padding: 1rem 1.5rem;
         font-size: 1rem;
-        display: block !important;
+        display: block;
         text-align: center;
         box-sizing: border-box;
     }
