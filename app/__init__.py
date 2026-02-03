@@ -67,7 +67,16 @@ def create_app():
     # Import and register blueprints
     from app.routes import main
     app.register_blueprint(main)
-    
+
+    # Prevent browser from caching HTML so deploys show up immediately
+    @app.after_request
+    def add_no_cache_headers(response):
+        if response.content_type and "text/html" in response.content_type:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     return app
 
 # Create the app instance for flask run command
