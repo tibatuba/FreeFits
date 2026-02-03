@@ -125,7 +125,7 @@ def upload_image_to_s3(file_obj, filename=None, content_type=None):
             content_type = content_type_map.get(file_ext, 'image/jpeg')
         
         # Reset file pointer to beginning
-        if hasattr(file_obj, 'seek'):a
+        if hasattr(file_obj, 'seek'):
             file_obj.seek(0)
         
         # Upload to S3
