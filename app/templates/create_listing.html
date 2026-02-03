@@ -40,28 +40,30 @@
                 <div class="error-message">{{ error }}</div>
             {% endif %}
 
+            {% set form = form|default({}) %}
+            {% set form_size_list = form_size_list|default([]) %}
             <form action="{{ url_for('main.create_listing_page') }}" method="POST" class="create-form" enctype="multipart/form-data">
                 <label for="image">Item Image *</label>
                 <input type="file" id="image" name="image" accept="image/*" required>
                 <small style="color: #666; font-size: 0.85rem;">Upload one image of your item (JPG, PNG, etc.)</small>
 
                 <label for="title">Title *</label>
-                <input type="text" id="title" name="title" placeholder="e.g., Organic Cotton T-Shirt" required>
+                <input type="text" id="title" name="title" placeholder="e.g., Organic Cotton T-Shirt" value="{{ form.get('title', '') }}" required>
 
                 <label for="description">Description *</label>
-                <textarea id="description" name="description" rows="5" placeholder="Describe your item in detail..." required></textarea>
+                <textarea id="description" name="description" rows="5" placeholder="Describe your item in detail..." required>{{ form.get('description', '') }}</textarea>
 
                 <label for="category">Category *</label>
                 <select id="category" name="category" required>
                     <option value="">Select a category</option>
-                    <option value="Tops">Tops</option>
-                    <option value="Dresses">Dresses</option>
-                    <option value="Jackets">Jackets</option>
-                    <option value="Pants">Pants</option>
-                    <option value="Shoes">Shoes</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Sweaters">Sweaters</option>
-                    <option value="Skirts">Skirts</option>
+                    <option value="Tops" {{ 'selected' if form.get('category') == 'Tops' else '' }}>Tops</option>
+                    <option value="Dresses" {{ 'selected' if form.get('category') == 'Dresses' else '' }}>Dresses</option>
+                    <option value="Jackets" {{ 'selected' if form.get('category') == 'Jackets' else '' }}>Jackets</option>
+                    <option value="Pants" {{ 'selected' if form.get('category') == 'Pants' else '' }}>Pants</option>
+                    <option value="Shoes" {{ 'selected' if form.get('category') == 'Shoes' else '' }}>Shoes</option>
+                    <option value="Accessories" {{ 'selected' if form.get('category') == 'Accessories' else '' }}>Accessories</option>
+                    <option value="Sweaters" {{ 'selected' if form.get('category') == 'Sweaters' else '' }}>Sweaters</option>
+                    <option value="Skirts" {{ 'selected' if form.get('category') == 'Skirts' else '' }}>Skirts</option>
                 </select>
 
                 <label for="size">Size *</label>
@@ -73,23 +75,23 @@
                         </div>
                         <div class="custom-multi-select-dropdown" id="size-dropdown">
                             <div class="custom-multi-select-option" data-value="Small">
-                                <input type="checkbox" id="size-small" value="Small" name="size">
+                                <input type="checkbox" id="size-small" value="Small" name="size" {{ 'checked' if form_size_list and 'Small' in form_size_list else '' }}>
                                 <label for="size-small">Small</label>
                             </div>
                             <div class="custom-multi-select-option" data-value="Medium">
-                                <input type="checkbox" id="size-medium" value="Medium" name="size">
+                                <input type="checkbox" id="size-medium" value="Medium" name="size" {{ 'checked' if form_size_list and 'Medium' in form_size_list else '' }}>
                                 <label for="size-medium">Medium</label>
                             </div>
                             <div class="custom-multi-select-option" data-value="Large">
-                                <input type="checkbox" id="size-large" value="Large" name="size">
+                                <input type="checkbox" id="size-large" value="Large" name="size" {{ 'checked' if form_size_list and 'Large' in form_size_list else '' }}>
                                 <label for="size-large">Large</label>
                             </div>
                             <div class="custom-multi-select-option" data-value="XL">
-                                <input type="checkbox" id="size-xl" value="XL" name="size">
+                                <input type="checkbox" id="size-xl" value="XL" name="size" {{ 'checked' if form_size_list and 'XL' in form_size_list else '' }}>
                                 <label for="size-xl">XL</label>
                             </div>
                             <div class="custom-multi-select-option" data-value="2XL">
-                                <input type="checkbox" id="size-2xl" value="2XL" name="size">
+                                <input type="checkbox" id="size-2xl" value="2XL" name="size" {{ 'checked' if form_size_list and '2XL' in form_size_list else '' }}>
                                 <label for="size-2xl">2XL</label>
                             </div>
                         </div>
@@ -99,15 +101,15 @@
                 <label for="condition">Condition *</label>
                 <select id="condition" name="condition" required>
                     <option value="">Select condition</option>
-                    <option value="Like New">Like New</option>
-                    <option value="Excellent">Excellent</option>
-                    <option value="Good">Good</option>
-                    <option value="Fair">Fair</option>
+                    <option value="Like New" {{ 'selected' if form.get('condition') == 'Like New' else '' }}>Like New</option>
+                    <option value="Excellent" {{ 'selected' if form.get('condition') == 'Excellent' else '' }}>Excellent</option>
+                    <option value="Good" {{ 'selected' if form.get('condition') == 'Good' else '' }}>Good</option>
+                    <option value="Fair" {{ 'selected' if form.get('condition') == 'Fair' else '' }}>Fair</option>
                 </select>
 
                 <label for="location">Location (Address, City, Province, Postal Code) *</label>
                 <div class="location-input-wrapper" style="position: relative;">
-                    <input type="text" id="location" name="location" placeholder="e.g., 123 Main St, Toronto, ON or L5M 6R7" required autocomplete="off">
+                    <input type="text" id="location" name="location" placeholder="e.g., 123 Main St, Toronto, ON or L5M 6R7" value="{{ form.get('location', '') }}" required autocomplete="off">
                     <input type="hidden" id="location-selected" name="location-selected" value="false">
                     <div id="location-suggestions" class="location-suggestions"></div>
                 </div>
@@ -508,6 +510,9 @@
             sizeDropdown.addEventListener('click', function(e) {
                 e.stopPropagation();
             });
+
+            // Sync placeholder on load (e.g. after validation error with preserved form)
+            updateDisplay();
         })();
     </script>
 </body>

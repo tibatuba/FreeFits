@@ -290,31 +290,39 @@ def create_listing_page():
         location = request.form.get("location")
         image_file = request.files.get("image")
         
-        # Basic validation
+        # Basic validation (preserve form data on error)
         if not all([title, description, category, condition, location]):
-            return render_template("create_listing.html", 
+            return render_template("create_listing.html",
                                  username=username,
-                                 error="All fields are required.")
+                                 error="All fields are required.",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         # Validate size (at least one must be selected)
         if not size or not size.strip():
-            return render_template("create_listing.html", 
+            return render_template("create_listing.html",
                                  username=username,
-                                 error="Please select at least one size.")
+                                 error="Please select at least one size.",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         # Validate image
         if not image_file or image_file.filename == '':
-            return render_template("create_listing.html", 
+            return render_template("create_listing.html",
                                  username=username,
-                                 error="Please upload an image.")
+                                 error="Please upload an image.",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         # Check if file is an image
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
         file_ext = image_file.filename.rsplit('.', 1)[1].lower() if '.' in image_file.filename else ''
         if file_ext not in allowed_extensions:
-            return render_template("create_listing.html", 
+            return render_template("create_listing.html",
                                  username=username,
-                                 error="Invalid image format. Please upload JPG, PNG, GIF, or WEBP.")
+                                 error="Invalid image format. Please upload JPG, PNG, GIF, or WEBP.",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         # Check file size (10MB limit)
         image_file.seek(0, os.SEEK_END)  # Seek to end
@@ -324,7 +332,9 @@ def create_listing_page():
         if file_size > MAX_FILE_SIZE:
             return render_template("create_listing.html",
                                  username=username,
-                                 error=f"Image file is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.1f}MB.")
+                                 error=f"Image file is too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.1f}MB.",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         # Check if S3 is configured
         use_s3 = True
@@ -386,9 +396,11 @@ def create_listing_page():
                         os.remove(temp_filepath)
                 except:
                     pass
-                return render_template("create_listing.html", 
+                return render_template("create_listing.html",
                                      username=username,
-                                     error=error_message or "Image validation failed. Please upload an image of a clothing item.")
+                                     error=error_message or "Image validation failed. Please upload an image of a clothing item.",
+                                     form=request.form,
+                                     form_size_list=request.form.getlist("size"))
             
             # Upload to S3 or save to filesystem
             filename = None
@@ -442,7 +454,9 @@ def create_listing_page():
             current_app.logger.error(f"Error processing image: {e}")
             return render_template("create_listing.html",
                                  username=username,
-                                 error=f"Error processing image: {str(e)}")
+                                 error=f"Error processing image: {str(e)}",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         # Geocode the location to get coordinates
         latitude = None
@@ -474,9 +488,11 @@ def create_listing_page():
                 print(f"ERROR: {error_msg}")
             
             flash("Database connection error. Please check server logs for details.", "error")
-            return render_template("create_listing.html", 
+            return render_template("create_listing.html",
                                  username=username,
-                                 error="Database connection error. Please check that MongoDB is running and configured.")
+                                 error="Database connection error. Please check that MongoDB is running and configured.",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
         
         try:
             new_listing = create_listing(
@@ -496,9 +512,11 @@ def create_listing_page():
             # Verify the listing was created and has a valid ID
             if not new_listing or not new_listing.id or new_listing.id == "demo":
                 flash("Failed to save listing. Please try again.", "error")
-                return render_template("create_listing.html", 
+                return render_template("create_listing.html",
                                      username=username,
-                                     error="Failed to save listing. Please try again.")
+                                     error="Failed to save listing. Please try again.",
+                                     form=request.form,
+                                     form_size_list=request.form.getlist("size"))
             
             flash("Listing created successfully!", "success")
             return redirect(url_for("main.view_listing", listing_id=new_listing.id))
@@ -506,11 +524,13 @@ def create_listing_page():
         except Exception as e:
             print(f"ERROR creating listing: {e}")
             flash(f"Error creating listing: {str(e)}", "error")
-            return render_template("create_listing.html", 
+            return render_template("create_listing.html",
                                  username=username,
-                                 error=f"Error creating listing: {str(e)}")
+                                 error=f"Error creating listing: {str(e)}",
+                                 form=request.form,
+                                 form_size_list=request.form.getlist("size"))
     
-    return render_template("create_listing.html", username=username)
+    return render_template("create_listing.html", username=username, form=request.form, form_size_list=request.form.getlist("size"))
 
 # Contact/Message seller route (requires authentication)
 @main.route("/listing/<listing_id>/contact", methods=["POST"])

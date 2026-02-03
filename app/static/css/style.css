@@ -1527,6 +1527,17 @@ label[for="location"] {
     box-shadow: 0 6px 20px rgba(26, 77, 26, 0.4);
 }
 
+/* Desktop: contact button not full-width, so it doesn't look awkward */
+@media (min-width: 769px) {
+    .detail-actions .contact-btn-large,
+    .detail-actions form .contact-btn-large {
+        width: auto;
+        min-width: 220px;
+        max-width: 320px;
+        display: inline-block;
+    }
+}
+
 .detail-footer {
     padding-top: 1.5rem;
     margin-top: 1.5rem;
