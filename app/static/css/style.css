@@ -1362,6 +1362,62 @@ label[for="location"] {
     font-size: 0.9rem;
 }
 
+/* My Listings: Edit/Delete below the card, not on the image */
+.my-listings-card-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.my-listings-card-wrapper .listing-card-link {
+    flex: 1;
+}
+
+.my-listings-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 0 0;
+    margin-top: 0.25rem;
+    border-top: 1px solid #e3efe3;
+}
+
+.my-listings-edit-btn,
+.my-listings-delete-btn {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+}
+
+.my-listings-edit-btn {
+    background-color: #2d5a2d;
+    color: white;
+}
+
+.my-listings-edit-btn:hover {
+    background-color: #1e3e1e;
+}
+
+.my-listings-delete-form {
+    flex: 1;
+    display: block;
+}
+
+.my-listings-delete-btn {
+    width: 100%;
+    background-color: #d32f2f;
+    color: white;
+}
+
+.my-listings-delete-btn:hover {
+    background-color: #b71c1c;
+}
+
 /* Listing detail page */
 .listing-detail-page {
     max-width: 1200px;
