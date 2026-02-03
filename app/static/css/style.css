@@ -1481,6 +1481,28 @@ label[for="location"] {
 
 .detail-actions {
     margin-top: 1rem;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.detail-actions form {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.detail-actions > a {
+    width: 100%;
+    display: block;
+    text-align: center;
+}
+
+.detail-actions > a.contact-btn-large {
+    display: block;
+    margin: 0 auto;
+    text-align: center;
 }
 
 .contact-btn-large {
@@ -1914,6 +1936,67 @@ label[for="location"] {
 
     .detail-image {
         height: 300px;
+    }
+
+    .detail-actions {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .detail-actions form {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        display: block;
+    }
+
+    .detail-actions form button.contact-btn-large {
+        width: 100%;
+        display: block;
+        box-sizing: border-box;
+    }
+
+    .detail-actions > a {
+        width: 100%;
+        display: block;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    .detail-actions > a.contact-btn-large {
+        display: block;
+        width: 100%;
+        margin: 0;
+        text-align: center;
+    }
+
+    .detail-actions > div {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .detail-actions > div > a,
+    .detail-actions > div > form {
+        width: 100%;
+    }
+
+    .detail-actions > div > form button {
+        width: 100%;
+    }
+
+    .contact-btn-large {
+        width: 100% !important;
+        max-width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
+        display: block !important;
+        text-align: center;
+        box-sizing: border-box;
     }
 
     .detail-title {
