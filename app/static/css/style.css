@@ -1362,22 +1362,26 @@ label[for="location"] {
     font-size: 0.9rem;
 }
 
-/* My Listings: Edit/Delete below the card, not on the image */
-.my-listings-card-wrapper {
+/* My Listings: Edit/Delete below the card content, never on the image */
+.my-listings-card-wrapper .listing-card {
     display: flex;
     flex-direction: column;
 }
 
 .my-listings-card-wrapper .listing-card-link {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .my-listings-card-actions {
+    position: static !important;
     display: flex;
     gap: 0.5rem;
-    padding: 0.75rem 0 0;
+    padding: 0.75rem 1rem;
+    margin: 0;
     margin-top: 0.25rem;
     border-top: 1px solid #e3efe3;
+    flex-shrink: 0;
 }
 
 .my-listings-edit-btn,

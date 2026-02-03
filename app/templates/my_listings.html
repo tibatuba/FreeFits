@@ -59,8 +59,8 @@
                 <div class="listings-grid">
                     {% for listing in listings %}
                     <div class="listing-card-wrapper my-listings-card-wrapper">
-                        <a href="{{ url_for('main.view_listing', listing_id=listing.id) }}" class="listing-card-link">
-                            <div class="listing-card">
+                        <div class="listing-card">
+                            <a href="{{ url_for('main.view_listing', listing_id=listing.id) }}" class="listing-card-link">
                                 <div class="listing-image">
                                     {% if listing.image_url %}
                                         <img src="{{ listing.image_url }}" alt="{{ listing.title }}" style="width: 100%; height: 100%; object-fit: cover;">
@@ -85,13 +85,13 @@
                                         <span class="view-details-btn">View Details →</span>
                                     </div>
                                 </div>
+                            </a>
+                            <div class="listing-card-actions my-listings-card-actions">
+                                <a href="{{ url_for('main.edit_listing', listing_id=listing.id) }}" class="my-listings-edit-btn">✏️ Edit</a>
+                                <form action="{{ url_for('main.delete_listing_route', listing_id=listing.id) }}" method="POST" class="my-listings-delete-form" onsubmit="return confirm('Are you sure you want to delete this listing? This action cannot be undone.');">
+                                    <button type="submit" class="my-listings-delete-btn">🗑️ Delete</button>
+                                </form>
                             </div>
-                        </a>
-                        <div class="listing-card-actions my-listings-card-actions">
-                            <a href="{{ url_for('main.edit_listing', listing_id=listing.id) }}" class="my-listings-edit-btn">✏️ Edit</a>
-                            <form action="{{ url_for('main.delete_listing_route', listing_id=listing.id) }}" method="POST" class="my-listings-delete-form" onsubmit="return confirm('Are you sure you want to delete this listing? This action cannot be undone.');">
-                                <button type="submit" class="my-listings-delete-btn">🗑️ Delete</button>
-                            </form>
                         </div>
                     </div>
                     {% endfor %}
