@@ -1516,12 +1516,17 @@ label[for="location"] {
     box-shadow: 0 6px 20px rgba(26, 77, 26, 0.4);
 }
 
-/* Desktop: contact button styling (deploy test: visible border = CSS updated) */
+/* Desktop: contact button - not full width, clear styling */
 @media (min-width: 769px) {
     .detail-actions .contact-btn-large,
     .detail-actions form .contact-btn-large {
+        width: auto;
+        min-width: 220px;
+        max-width: 320px;
+        display: inline-block;
         border: 2px solid rgba(255, 255, 255, 0.5);
         border-radius: 14px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
     }
 }
 
