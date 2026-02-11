@@ -37,9 +37,11 @@ MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 MIN_IMAGE_SIZE_BYTES = 1024  # 1 KB
 
 # AWS Rekognition API configuration
-REKOGNITION_MAX_LABELS = 20
+REKOGNITION_MAX_LABELS = 50  # More labels to catch Person + Clothing and granular items
 REKOGNITION_MIN_CONFIDENCE = 50.0  # Minimum confidence for clothing detection
-REKOGNITION_NON_CLOTHING_MIN_CONFIDENCE = 70.0  # Higher threshold for rejection
+REKOGNITION_CLOTHING_MIN_WHEN_PERSON = 40.0  # Lower threshold when Person is detected (person wearing clothes)
+REKOGNITION_DOMINANT_MIN_CONFIDENCE = 75.0  # If top label is not person/clothing above this, reject (main subject must be clothing or person)
+REKOGNITION_MODERATION_MIN_CONFIDENCE = 50.0  # Reject if NSFW/suggestive above this
 
 # API timeout (seconds)
 API_TIMEOUT = 30
@@ -62,26 +64,33 @@ CLOTHING_LABELS = frozenset({
     'pajamas', 'sleepwear', 'loungewear'
 })
 
-# Non-clothing labels that indicate the image is NOT clothing
-# Used by both Imagga and AWS Rekognition
+# Person/person-related labels (allowed as dominant subject; people wear clothing)
+REKOGNITION_PERSON_LABELS = frozenset({'person', 'people', 'human', 'portrait', 'crowd', 'group'})
+
+# Non-clothing labels (used by Imagga / other APIs; Rekognition uses allowed-dominant rule instead)
 NON_CLOTHING_LABELS = frozenset({
-    'house', 'building', 'home', 'residence', 'architecture', 'structure',
-    'furniture', 'table', 'chair', 'desk', 'sofa', 'couch', 'bed', 'cabinet',
-    'vehicle', 'car', 'truck', 'motorcycle', 'bicycle', 'bike', 'automobile',
-    'food', 'meal', 'dish', 'restaurant', 'cooking', 'recipe',
-    'animal', 'pet', 'dog', 'cat', 'bird', 'wildlife',
-    'landscape', 'nature', 'mountain', 'forest', 'beach', 'ocean', 'sky',
-    'electronics', 'computer', 'phone', 'laptop', 'device',
-    'appliance', 'refrigerator', 'oven', 'microwave',
-    'plant', 'tree', 'flower', 'garden',
-    'tool', 'wrench', 'hammer', 'hardware', 'equipment'
-    # Note: 'person', 'people', 'group', 'crowd' are NOT in this list
-    # because people can wear clothing, so we check for clothing first
+    'house', 'building', 'vehicle', 'food', 'animal', 'landscape', 'nature',
+    'water', 'ocean', 'lake', 'river', 'sky', 'electronics', 'furniture',
+    'plant', 'flower', 'mountain', 'forest', 'beach', 'scenery', 'outdoor'
+})
+
+# Rekognition moderation categories to block (NSFW / inappropriate)
+REKOGNITION_BLOCKED_MODERATION_CATEGORIES = frozenset({
+    'explicit nudity', 'suggestive', 'violence', 'visually disturbing'
 })
 
 # Legacy aliases for backward compatibility
 CLOTHING_TAGS = CLOTHING_LABELS
 NON_CLOTHING_KEYWORDS = NON_CLOTHING_LABELS
+
+
+def _rekognition_dominant_is_allowed(label_name: str) -> bool:
+    """True if this label is person or clothing-related (allowed as main subject)."""
+    name = (label_name or '').lower()
+    if name in REKOGNITION_PERSON_LABELS:
+        return True
+    return any(kw in name for kw in CLOTHING_LABELS)
+
 
 # ============================================================================
 # SECURITY & VALIDATION FUNCTIONS
@@ -281,19 +290,8 @@ def validate_clothing_image(image_path: str, api_key: str, api_secret: str) -> T
 
 def validate_clothing_image_rekognition(image_path: str, aws_access_key_id: str, aws_secret_access_key: str, aws_region: str = "us-east-1") -> Tuple[bool, Optional[str]]:
     """
-    Validate if an uploaded image contains clothing items using AWS Rekognition.
-    This is the RECOMMENDED method - reliable, free tier available, and part of AWS.
-    
-    Free Tier: 5,000 images/month for first 12 months
-    
-    Args:
-        image_path: Path to the uploaded image file
-        aws_access_key_id: AWS Access Key ID
-        aws_secret_access_key: AWS Secret Access Key
-        aws_region: AWS region (default: us-east-1)
-        
-    Returns:
-        Tuple of (is_valid, error_message)
+    Validate if an uploaded image contains clothing (or a person wearing clothing) using AWS Rekognition.
+    Rejects NSFW (moderation), non-clothing (e.g. lake/landscape), and accepts person+wearing-clothing.
     """
     if not BOTO3_AVAILABLE:
         logger.error("boto3 library not installed")
@@ -322,60 +320,74 @@ def validate_clothing_image_rekognition(image_path: str, aws_access_key_id: str,
         with open(image_path, 'rb') as image_file:
             image_bytes = image_file.read()
         
-        # Call DetectLabels API
+        # 1) Moderation (NSFW) check first
+        try:
+            mod_response = rekognition_client.detect_moderation_labels(
+                Image={'Bytes': image_bytes},
+                MinConfidence=REKOGNITION_MODERATION_MIN_CONFIDENCE
+            )
+            for mod in mod_response.get('ModerationLabels', []):
+                name = (mod.get('Name') or mod.get('ParentName') or '').lower()
+                confidence = float(mod.get('Confidence', 0))
+                if confidence < REKOGNITION_MODERATION_MIN_CONFIDENCE:
+                    continue
+                for blocked in REKOGNITION_BLOCKED_MODERATION_CATEGORIES:
+                    if blocked in name:
+                        logger.info(f"Image rejected: Moderation label '{name}' at {confidence:.1f}%")
+                        return False, "This image cannot be used. Please upload an appropriate image of clothing."
+        except ClientError as mod_err:
+            code = mod_err.response.get('Error', {}).get('Code', '')
+            if code not in ('AccessDeniedException', 'InvalidParameterException'):
+                logger.warning(f"Moderation API error (continuing with labels): {mod_err}")
+        
+        # 2) Detect labels (lower MinConfidence to get Person + Clothing)
         response = rekognition_client.detect_labels(
             Image={'Bytes': image_bytes},
             MaxLabels=REKOGNITION_MAX_LABELS,
-            MinConfidence=REKOGNITION_MIN_CONFIDENCE
+            MinConfidence=25.0
         )
-        
-        logger.debug(f"AWS Rekognition API call successful. Detected {len(response.get('Labels', []))} labels.")
-        
-        # Extract labels and their confidence scores
         labels = response.get('Labels', [])
-        
         if not labels:
             logger.warning("No labels returned from AWS Rekognition")
             return False, "Could not analyze image. Please try a different image."
         
-        # Check for clothing labels
-        clothing_found = False
-        max_clothing_confidence = 0.0
-        detected_clothing = []
+        labels_sorted = sorted(labels, key=lambda x: float(x.get('Confidence', 0)), reverse=True)
+        top_label_name = (labels_sorted[0].get('Name') or '')
+        top_confidence = float(labels_sorted[0].get('Confidence', 0))
         
-        for label in labels:
-            label_name = label.get('Name', '').lower()
+        # 3) Dominant subject must be person or clothing (no blocklist: if top concept isn't allowed, reject)
+        if not _rekognition_dominant_is_allowed(top_label_name) and top_confidence >= REKOGNITION_DOMINANT_MIN_CONFIDENCE:
+            top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels_sorted[:3]]
+            logger.info(f"Image rejected: Main subject is not clothing/person ({top_label_name} at {top_confidence:.1f}%)")
+            return False, f"The main subject doesn't appear to be clothing or a person. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item or a person wearing clothing."
+        
+        # 4) Person present? (allow lower clothing confidence for "person wearing clothes")
+        person_confidence = 0.0
+        for label in labels_sorted:
+            name = (label.get('Name') or '').lower()
+            if name in REKOGNITION_PERSON_LABELS:
+                person_confidence = max(person_confidence, float(label.get('Confidence', 0)))
+        
+        # 5) Clothing detection
+        max_clothing_confidence = 0.0
+        for label in labels_sorted:
+            label_name = (label.get('Name') or '').lower()
             confidence = float(label.get('Confidence', 0))
-            
-            # Check if it's a clothing item (use module-level constant)
             for clothing_keyword in CLOTHING_LABELS:
                 if clothing_keyword in label_name:
-                    clothing_found = True
-                    detected_clothing.append(f"{label.get('Name')} ({confidence:.1f}%)")
-                    if confidence > max_clothing_confidence:
-                        max_clothing_confidence = confidence
+                    max_clothing_confidence = max(max_clothing_confidence, confidence)
                     break
         
-        # If clothing found with sufficient confidence, accept
-        if clothing_found and max_clothing_confidence >= REKOGNITION_MIN_CONFIDENCE:
-            logger.info(f"Image accepted: Clothing detected with {max_clothing_confidence:.1f}% confidence")
+        # 6) Accept: strong clothing OR (person + some clothing)
+        min_required = REKOGNITION_MIN_CONFIDENCE
+        if person_confidence >= 60.0:
+            min_required = min(min_required, REKOGNITION_CLOTHING_MIN_WHEN_PERSON)
+        if max_clothing_confidence >= min_required:
+            logger.info(f"Image accepted: Clothing {max_clothing_confidence:.1f}% (person {person_confidence:.1f}%)")
             return True, None
         
-        # Check for non-clothing labels with high confidence
-        for label in labels:
-            label_name = label.get('Name', '').lower()
-            confidence = float(label.get('Confidence', 0))
-            
-            for non_clothing_keyword in NON_CLOTHING_LABELS:
-                if non_clothing_keyword in label_name and confidence >= REKOGNITION_NON_CLOTHING_MIN_CONFIDENCE:
-                    top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels[:3]]
-                    logger.info(f"Image rejected: Non-clothing detected ({non_clothing_keyword} at {confidence:.1f}%)")
-                    return False, f"Image does not appear to contain clothing. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item."
-        
-        # No clothing found
-        top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels[:3]]
-        logger.info(f"Image rejected: No clothing detected. Top labels: {', '.join(top_labels)}")
-        return False, f"No clothing items detected in the image. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item."
+        top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels_sorted[:3]]
+        return False, f"No clothing items detected. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item or a person wearing clothing."
         
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
@@ -514,19 +526,8 @@ def validate_clothing_image_from_bytes(image_bytes: bytes, api_key: str, api_sec
 
 def validate_clothing_image_rekognition(image_path: str, aws_access_key_id: str, aws_secret_access_key: str, aws_region: str = "us-east-1") -> Tuple[bool, Optional[str]]:
     """
-    Validate if an uploaded image contains clothing items using AWS Rekognition.
-    This is the RECOMMENDED method - reliable, free tier available, and part of AWS.
-    
-    Free Tier: 5,000 images/month for first 12 months
-    
-    Args:
-        image_path: Path to the uploaded image file
-        aws_access_key_id: AWS Access Key ID
-        aws_secret_access_key: AWS Secret Access Key
-        aws_region: AWS region (default: us-east-1)
-        
-    Returns:
-        Tuple of (is_valid, error_message)
+    Validate if an uploaded image contains clothing (or a person wearing clothing) using AWS Rekognition.
+    Rejects NSFW (moderation), non-clothing (e.g. lake/landscape), and accepts person+wearing-clothing.
     """
     if not BOTO3_AVAILABLE:
         logger.error("boto3 library not installed")
@@ -555,60 +556,74 @@ def validate_clothing_image_rekognition(image_path: str, aws_access_key_id: str,
         with open(image_path, 'rb') as image_file:
             image_bytes = image_file.read()
         
-        # Call DetectLabels API
+        # 1) Moderation (NSFW) check first
+        try:
+            mod_response = rekognition_client.detect_moderation_labels(
+                Image={'Bytes': image_bytes},
+                MinConfidence=REKOGNITION_MODERATION_MIN_CONFIDENCE
+            )
+            for mod in mod_response.get('ModerationLabels', []):
+                name = (mod.get('Name') or mod.get('ParentName') or '').lower()
+                confidence = float(mod.get('Confidence', 0))
+                if confidence < REKOGNITION_MODERATION_MIN_CONFIDENCE:
+                    continue
+                for blocked in REKOGNITION_BLOCKED_MODERATION_CATEGORIES:
+                    if blocked in name:
+                        logger.info(f"Image rejected: Moderation label '{name}' at {confidence:.1f}%")
+                        return False, "This image cannot be used. Please upload an appropriate image of clothing."
+        except ClientError as mod_err:
+            code = mod_err.response.get('Error', {}).get('Code', '')
+            if code not in ('AccessDeniedException', 'InvalidParameterException'):
+                logger.warning(f"Moderation API error (continuing with labels): {mod_err}")
+        
+        # 2) Detect labels (lower MinConfidence to get Person + Clothing)
         response = rekognition_client.detect_labels(
             Image={'Bytes': image_bytes},
             MaxLabels=REKOGNITION_MAX_LABELS,
-            MinConfidence=REKOGNITION_MIN_CONFIDENCE
+            MinConfidence=25.0
         )
-        
-        logger.debug(f"AWS Rekognition API call successful. Detected {len(response.get('Labels', []))} labels.")
-        
-        # Extract labels and their confidence scores
         labels = response.get('Labels', [])
-        
         if not labels:
             logger.warning("No labels returned from AWS Rekognition")
             return False, "Could not analyze image. Please try a different image."
         
-        # Check for clothing labels
-        clothing_found = False
-        max_clothing_confidence = 0.0
-        detected_clothing = []
+        labels_sorted = sorted(labels, key=lambda x: float(x.get('Confidence', 0)), reverse=True)
+        top_label_name = (labels_sorted[0].get('Name') or '')
+        top_confidence = float(labels_sorted[0].get('Confidence', 0))
         
-        for label in labels:
-            label_name = label.get('Name', '').lower()
+        # 3) Dominant subject must be person or clothing (no blocklist: if top concept isn't allowed, reject)
+        if not _rekognition_dominant_is_allowed(top_label_name) and top_confidence >= REKOGNITION_DOMINANT_MIN_CONFIDENCE:
+            top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels_sorted[:3]]
+            logger.info(f"Image rejected: Main subject is not clothing/person ({top_label_name} at {top_confidence:.1f}%)")
+            return False, f"The main subject doesn't appear to be clothing or a person. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item or a person wearing clothing."
+        
+        # 4) Person present? (allow lower clothing confidence for "person wearing clothes")
+        person_confidence = 0.0
+        for label in labels_sorted:
+            name = (label.get('Name') or '').lower()
+            if name in REKOGNITION_PERSON_LABELS:
+                person_confidence = max(person_confidence, float(label.get('Confidence', 0)))
+        
+        # 5) Clothing detection
+        max_clothing_confidence = 0.0
+        for label in labels_sorted:
+            label_name = (label.get('Name') or '').lower()
             confidence = float(label.get('Confidence', 0))
-            
-            # Check if it's a clothing item (use module-level constant)
             for clothing_keyword in CLOTHING_LABELS:
                 if clothing_keyword in label_name:
-                    clothing_found = True
-                    detected_clothing.append(f"{label.get('Name')} ({confidence:.1f}%)")
-                    if confidence > max_clothing_confidence:
-                        max_clothing_confidence = confidence
+                    max_clothing_confidence = max(max_clothing_confidence, confidence)
                     break
         
-        # If clothing found with sufficient confidence, accept
-        if clothing_found and max_clothing_confidence >= REKOGNITION_MIN_CONFIDENCE:
-            logger.info(f"Image accepted: Clothing detected with {max_clothing_confidence:.1f}% confidence")
+        # 6) Accept: strong clothing OR (person + some clothing)
+        min_required = REKOGNITION_MIN_CONFIDENCE
+        if person_confidence >= 60.0:
+            min_required = min(min_required, REKOGNITION_CLOTHING_MIN_WHEN_PERSON)
+        if max_clothing_confidence >= min_required:
+            logger.info(f"Image accepted: Clothing {max_clothing_confidence:.1f}% (person {person_confidence:.1f}%)")
             return True, None
         
-        # Check for non-clothing labels with high confidence
-        for label in labels:
-            label_name = label.get('Name', '').lower()
-            confidence = float(label.get('Confidence', 0))
-            
-            for non_clothing_keyword in NON_CLOTHING_LABELS:
-                if non_clothing_keyword in label_name and confidence >= REKOGNITION_NON_CLOTHING_MIN_CONFIDENCE:
-                    top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels[:3]]
-                    logger.info(f"Image rejected: Non-clothing detected ({non_clothing_keyword} at {confidence:.1f}%)")
-                    return False, f"Image does not appear to contain clothing. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item."
-        
-        # No clothing found
-        top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels[:3]]
-        logger.info(f"Image rejected: No clothing detected. Top labels: {', '.join(top_labels)}")
-        return False, f"No clothing items detected in the image. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item."
+        top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels_sorted[:3]]
+        return False, f"No clothing items detected. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item or a person wearing clothing."
         
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
@@ -794,19 +809,8 @@ def validate_clothing_image_api4ai(image_path: str, api_key: str) -> Tuple[bool,
 
 def validate_clothing_image_rekognition(image_path: str, aws_access_key_id: str, aws_secret_access_key: str, aws_region: str = "us-east-1") -> Tuple[bool, Optional[str]]:
     """
-    Validate if an uploaded image contains clothing items using AWS Rekognition.
-    This is the RECOMMENDED method - reliable, free tier available, and part of AWS.
-    
-    Free Tier: 5,000 images/month for first 12 months
-    
-    Args:
-        image_path: Path to the uploaded image file
-        aws_access_key_id: AWS Access Key ID
-        aws_secret_access_key: AWS Secret Access Key
-        aws_region: AWS region (default: us-east-1)
-        
-    Returns:
-        Tuple of (is_valid, error_message)
+    Validate if an uploaded image contains clothing (or a person wearing clothing) using AWS Rekognition.
+    Rejects NSFW (moderation), non-clothing (e.g. lake/landscape), and accepts person+wearing-clothing.
     """
     if not BOTO3_AVAILABLE:
         logger.error("boto3 library not installed")
@@ -835,60 +839,74 @@ def validate_clothing_image_rekognition(image_path: str, aws_access_key_id: str,
         with open(image_path, 'rb') as image_file:
             image_bytes = image_file.read()
         
-        # Call DetectLabels API
+        # 1) Moderation (NSFW) check first
+        try:
+            mod_response = rekognition_client.detect_moderation_labels(
+                Image={'Bytes': image_bytes},
+                MinConfidence=REKOGNITION_MODERATION_MIN_CONFIDENCE
+            )
+            for mod in mod_response.get('ModerationLabels', []):
+                name = (mod.get('Name') or mod.get('ParentName') or '').lower()
+                confidence = float(mod.get('Confidence', 0))
+                if confidence < REKOGNITION_MODERATION_MIN_CONFIDENCE:
+                    continue
+                for blocked in REKOGNITION_BLOCKED_MODERATION_CATEGORIES:
+                    if blocked in name:
+                        logger.info(f"Image rejected: Moderation label '{name}' at {confidence:.1f}%")
+                        return False, "This image cannot be used. Please upload an appropriate image of clothing."
+        except ClientError as mod_err:
+            code = mod_err.response.get('Error', {}).get('Code', '')
+            if code not in ('AccessDeniedException', 'InvalidParameterException'):
+                logger.warning(f"Moderation API error (continuing with labels): {mod_err}")
+        
+        # 2) Detect labels (lower MinConfidence to get Person + Clothing)
         response = rekognition_client.detect_labels(
             Image={'Bytes': image_bytes},
             MaxLabels=REKOGNITION_MAX_LABELS,
-            MinConfidence=REKOGNITION_MIN_CONFIDENCE
+            MinConfidence=25.0
         )
-        
-        logger.debug(f"AWS Rekognition API call successful. Detected {len(response.get('Labels', []))} labels.")
-        
-        # Extract labels and their confidence scores
         labels = response.get('Labels', [])
-        
         if not labels:
             logger.warning("No labels returned from AWS Rekognition")
             return False, "Could not analyze image. Please try a different image."
         
-        # Check for clothing labels
-        clothing_found = False
-        max_clothing_confidence = 0.0
-        detected_clothing = []
+        labels_sorted = sorted(labels, key=lambda x: float(x.get('Confidence', 0)), reverse=True)
+        top_label_name = (labels_sorted[0].get('Name') or '')
+        top_confidence = float(labels_sorted[0].get('Confidence', 0))
         
-        for label in labels:
-            label_name = label.get('Name', '').lower()
+        # 3) Dominant subject must be person or clothing (no blocklist: if top concept isn't allowed, reject)
+        if not _rekognition_dominant_is_allowed(top_label_name) and top_confidence >= REKOGNITION_DOMINANT_MIN_CONFIDENCE:
+            top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels_sorted[:3]]
+            logger.info(f"Image rejected: Main subject is not clothing/person ({top_label_name} at {top_confidence:.1f}%)")
+            return False, f"The main subject doesn't appear to be clothing or a person. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item or a person wearing clothing."
+        
+        # 4) Person present? (allow lower clothing confidence for "person wearing clothes")
+        person_confidence = 0.0
+        for label in labels_sorted:
+            name = (label.get('Name') or '').lower()
+            if name in REKOGNITION_PERSON_LABELS:
+                person_confidence = max(person_confidence, float(label.get('Confidence', 0)))
+        
+        # 5) Clothing detection
+        max_clothing_confidence = 0.0
+        for label in labels_sorted:
+            label_name = (label.get('Name') or '').lower()
             confidence = float(label.get('Confidence', 0))
-            
-            # Check if it's a clothing item (use module-level constant)
             for clothing_keyword in CLOTHING_LABELS:
                 if clothing_keyword in label_name:
-                    clothing_found = True
-                    detected_clothing.append(f"{label.get('Name')} ({confidence:.1f}%)")
-                    if confidence > max_clothing_confidence:
-                        max_clothing_confidence = confidence
+                    max_clothing_confidence = max(max_clothing_confidence, confidence)
                     break
         
-        # If clothing found with sufficient confidence, accept
-        if clothing_found and max_clothing_confidence >= REKOGNITION_MIN_CONFIDENCE:
-            logger.info(f"Image accepted: Clothing detected with {max_clothing_confidence:.1f}% confidence")
+        # 6) Accept: strong clothing OR (person + some clothing)
+        min_required = REKOGNITION_MIN_CONFIDENCE
+        if person_confidence >= 60.0:
+            min_required = min(min_required, REKOGNITION_CLOTHING_MIN_WHEN_PERSON)
+        if max_clothing_confidence >= min_required:
+            logger.info(f"Image accepted: Clothing {max_clothing_confidence:.1f}% (person {person_confidence:.1f}%)")
             return True, None
         
-        # Check for non-clothing labels with high confidence
-        for label in labels:
-            label_name = label.get('Name', '').lower()
-            confidence = float(label.get('Confidence', 0))
-            
-            for non_clothing_keyword in NON_CLOTHING_LABELS:
-                if non_clothing_keyword in label_name and confidence >= REKOGNITION_NON_CLOTHING_MIN_CONFIDENCE:
-                    top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels[:3]]
-                    logger.info(f"Image rejected: Non-clothing detected ({non_clothing_keyword} at {confidence:.1f}%)")
-                    return False, f"Image does not appear to contain clothing. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item."
-        
-        # No clothing found
-        top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels[:3]]
-        logger.info(f"Image rejected: No clothing detected. Top labels: {', '.join(top_labels)}")
-        return False, f"No clothing items detected in the image. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item."
+        top_labels = [f"{l.get('Name')} ({l.get('Confidence', 0):.1f}%)" for l in labels_sorted[:3]]
+        return False, f"No clothing items detected. Detected: {', '.join(top_labels)}. Please upload an image of a clothing item or a person wearing clothing."
         
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
