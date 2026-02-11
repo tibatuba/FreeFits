@@ -65,7 +65,8 @@ CLOTHING_LABELS = frozenset({
 })
 
 # Person/person-related labels (allowed as dominant subject; people wear clothing)
-REKOGNITION_PERSON_LABELS = frozenset({'person', 'people', 'human', 'portrait', 'crowd', 'group'})
+# Include face/head so selfies and close-ups of someone wearing clothes are accepted
+REKOGNITION_PERSON_LABELS = frozenset({'person', 'people', 'human', 'portrait', 'crowd', 'group', 'face', 'head'})
 
 # Non-clothing labels (used by Imagga / other APIs; Rekognition uses allowed-dominant rule instead)
 NON_CLOTHING_LABELS = frozenset({
