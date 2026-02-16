@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+image.png<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -227,6 +227,7 @@
     </footer>
 
     <script>
+        var google_places_api_key = {{ google_places_api_key | tojson }};
         // Searchable category dropdown
         (function() {
             const categorySelect = document.getElementById('category-select');
@@ -316,260 +317,82 @@
             buildDropdown();
         })();
 
-        // Location Autocomplete using Geocoder.ca API (Free, Canadian postal codes and cities)
+        // Location Autocomplete: Google Places API (Canada only)
         (function() {
+            const apiKey = typeof google_places_api_key !== 'undefined' ? google_places_api_key : '';
             const locationInput = document.getElementById('location-search');
             const suggestionsDiv = document.getElementById('location-suggestions');
             let debounceTimer;
             let currentSuggestions = [];
             let selectedIndex = -1;
 
-            if (!locationInput || !suggestionsDiv) {
-                console.error('Location autocomplete elements not found');
+            if (!locationInput || !suggestionsDiv) return;
+            if (!apiKey) {
+                locationInput.placeholder = 'Enter city or postal code (e.g. Toronto, ON or M5H 2N2)';
                 return;
             }
 
             locationInput.addEventListener('input', function() {
                 const query = this.value.trim();
-                
                 clearTimeout(debounceTimer);
                 selectedIndex = -1;
-                
                 if (query.length < 2) {
                     suggestionsDiv.classList.remove('show');
                     return;
                 }
-
-                debounceTimer = setTimeout(() => {
-                    searchCanadianLocations(query);
-                }, 300);
+                debounceTimer = setTimeout(() => fetchGoogleSuggestions(query), 300);
             });
 
             locationInput.addEventListener('focus', function() {
-                if (this.value.trim().length >= 2 && currentSuggestions.length > 0) {
-                    suggestionsDiv.classList.add('show');
-                }
+                if (this.value.trim().length >= 2 && currentSuggestions.length > 0) suggestionsDiv.classList.add('show');
             });
 
-            function searchCanadianLocations(query) {
-                // Check if it looks like a postal code (Canadian format: A1A 1A1 or A1A1A1)
-                const cleanQuery = query.replace(/\s+/g, '').toUpperCase();
-                const postalCodePattern = /^[A-Za-z]\d[A-Za-z]/;
-                
-                // If it's 6+ characters and matches postal code pattern, try postal code first
-                if (cleanQuery.length >= 6 && postalCodePattern.test(cleanQuery)) {
-                    // Try postal code search
-                    searchPostalCode(cleanQuery);
-                } else {
-                    // Search for addresses, cities, or any location in Canada
-                    searchCanadianAddresses(query);
-                }
-            }
-
-            function searchPostalCode(postalCode) {
-                // Format postal code (A1A1A1 -> A1A 1A1)
-                let formatted = postalCode;
-                if (postalCode.length === 6) {
-                    formatted = `${postalCode.substring(0, 3)} ${postalCode.substring(3)}`;
-                } else if (postalCode.length === 7 && postalCode.includes(' ')) {
-                    formatted = postalCode;
-                }
-                
-                // Geocoder.ca API - free, no API key needed
-                const url = `https://geocoder.ca/${encodeURIComponent(formatted)}?json=1`;
-                
-                console.log('Searching postal code:', formatted);
-                
+            function fetchGoogleSuggestions(query) {
+                const url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=' + encodeURIComponent(query) + '&components=country:ca&key=' + encodeURIComponent(apiKey);
                 fetch(url)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
+                    .then(r => r.json())
                     .then(data => {
-                        console.log('Postal code response:', data);
-                        if (data && data.latt && data.longt) {
-                            // Format the result
-                            const city = data.city || '';
-                            const prov = data.prov || '';
-                            const displayText = city && prov ? `${city}, ${prov} ${formatted}` : prov ? `${formatted}, ${prov}` : formatted;
-                            
-                            currentSuggestions = [{
-                                description: displayText,
-                                lat: parseFloat(data.latt),
-                                lon: parseFloat(data.longt),
-                                postalCode: formatted
-                            }];
-                            displaySuggestions(currentSuggestions);
-                        } else {
-                            // Try Canadian address search as fallback
-                            searchCanadianAddresses(formatted);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching postal code:', error);
-                        // Fallback to Canadian address search
-                        searchCanadianAddresses(postalCode);
-                    });
-            }
-
-            function searchCanadianAddresses(query) {
-                // Use Nominatim to search for addresses, cities, postal codes, or any location in Canada
-                // Add "Canada" to the query to restrict results to Canada
-                const searchQuery = `${query}, Canada`;
-                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=ca&limit=10&addressdetails=1`;
-                
-                console.log('Searching Canadian locations:', query);
-                
-                fetch(url, {
-                    headers: {
-                        'User-Agent': 'FreeFits/1.0'
-                    }
-                })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        console.log('Canadian search response:', data);
-                        if (data && data.length > 0) {
-                            // Filter to ensure results are in Canada
-                            const canadianResults = data.filter(item => {
-                                const address = item.address || {};
-                                const country = (address.country || '').toLowerCase();
-                                return country.includes('canada') || country === 'ca';
-                            });
-                            
-                            if (canadianResults.length > 0) {
-                                currentSuggestions = canadianResults.map(item => ({
-                                    description: formatCanadianAddress(item),
-                                    lat: parseFloat(item.lat),
-                                    lon: parseFloat(item.lon),
-                                    address: item.address
-                                }));
-                                displaySuggestions(currentSuggestions);
-                            } else {
-                                // If no filtered results, show all results (should be Canada anyway)
-                                currentSuggestions = data.map(item => ({
-                                    description: formatCanadianAddress(item),
-                                    lat: parseFloat(item.lat),
-                                    lon: parseFloat(item.lon),
-                                    address: item.address
-                                }));
-                                displaySuggestions(currentSuggestions);
-                            }
-                        } else {
+                        if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
                             suggestionsDiv.classList.remove('show');
                             currentSuggestions = [];
+                            return;
                         }
+                        const predictions = data.predictions || [];
+                        currentSuggestions = predictions.map(p => ({ description: p.description, place_id: p.place_id }));
+                        displaySuggestions(currentSuggestions);
                     })
-                    .catch(error => {
-                        console.error('Error fetching locations:', error);
+                    .catch(() => {
                         suggestionsDiv.classList.remove('show');
                         currentSuggestions = [];
                     });
             }
 
-            function formatCanadianAddress(result) {
-                const address = result.address || {};
-                const parts = [];
-
-                // For addresses, show street address if available
-                if (address.road || address.house_number) {
-                    const streetParts = [];
-                    if (address.house_number) {
-                        streetParts.push(address.house_number);
-                    }
-                    if (address.road) {
-                        streetParts.push(address.road);
-                    }
-                    if (streetParts.length > 0) {
-                        parts.push(streetParts.join(' '));
-                    }
-                }
-
-                // Add city/town
-                if (address.city) {
-                    parts.push(address.city);
-                } else if (address.town) {
-                    parts.push(address.town);
-                } else if (address.village) {
-                    parts.push(address.village);
-                } else if (address.municipality) {
-                    parts.push(address.municipality);
-                } else if (address.suburb) {
-                    parts.push(address.suburb);
-                }
-
-                // Add province/state
-                if (address.state) {
-                    parts.push(address.state);
-                } else if (address.province) {
-                    parts.push(address.province);
-                }
-
-                // Add postal code if available (this is important for the user!)
-                if (address.postcode) {
-                    parts.push(address.postcode);
-                }
-
-                // If we have parts, use them; otherwise use display_name
-                if (parts.length > 0) {
-                    return parts.join(', ');
-                } else {
-                    // Fallback: use display_name but clean it up
-                    return result.display_name || 'Unknown location';
-                }
-            }
-
             function displaySuggestions(results) {
-                if (!suggestionsDiv) return;
-
                 suggestionsDiv.innerHTML = '';
-
                 if (!results || results.length === 0) {
                     suggestionsDiv.classList.remove('show');
                     return;
                 }
-
                 results.forEach((result, index) => {
                     const div = document.createElement('div');
-                    div.className = 'location-suggestion';
-                    if (index === selectedIndex) {
-                        div.classList.add('selected');
-                    }
-
-                    // Use description field that was already formatted
-                    const displayText = result.description || result.display_name || 'Unknown location';
-                    div.textContent = displayText;
-                    div.dataset.full = displayText;
-                    div.dataset.lat = result.lat;
-                    div.dataset.lon = result.lon;
-
+                    div.className = 'location-suggestion' + (index === selectedIndex ? ' selected' : '');
+                    div.textContent = result.description;
+                    div.dataset.full = result.description;
                     div.addEventListener('click', function() {
                         locationInput.value = this.dataset.full;
                         suggestionsDiv.classList.remove('show');
                         selectedIndex = -1;
                     });
-
                     div.addEventListener('mouseenter', function() {
-                        document.querySelectorAll('.location-suggestion').forEach(s => {
-                            s.classList.remove('selected');
-                        });
+                        document.querySelectorAll('.location-suggestion').forEach(s => s.classList.remove('selected'));
                         this.classList.add('selected');
                         selectedIndex = index;
                     });
-
                     suggestionsDiv.appendChild(div);
                 });
-
                 suggestionsDiv.classList.add('show');
             }
 
-            // Hide suggestions when clicking outside
             document.addEventListener('click', function(e) {
                 if (!locationInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
                     suggestionsDiv.classList.remove('show');
@@ -577,47 +400,33 @@
                 }
             });
 
-            // Keyboard navigation
             locationInput.addEventListener('keydown', function(e) {
                 const suggestions = suggestionsDiv.querySelectorAll('.location-suggestion');
-                
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    if (suggestions.length > 0) {
-                        selectedIndex = (selectedIndex + 1) % suggestions.length;
-                        updateSelection(suggestions);
-                    }
+                    if (suggestions.length) { selectedIndex = (selectedIndex + 1) % suggestions.length; updateSel(suggestions); }
                 } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    if (suggestions.length > 0) {
-                        selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1;
-                        updateSelection(suggestions);
-                    }
-                } else if (e.key === 'Enter') {
-                    if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-                        e.preventDefault();
-                        locationInput.value = suggestions[selectedIndex].dataset.full;
-                        suggestionsDiv.classList.remove('show');
-                        selectedIndex = -1;
-                    }
+                    if (suggestions.length) { selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1; updateSel(suggestions); }
+                } else if (e.key === 'Enter' && selectedIndex >= 0 && suggestions[selectedIndex]) {
+                    e.preventDefault();
+                    locationInput.value = suggestions[selectedIndex].dataset.full;
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
                 } else if (e.key === 'Escape') {
                     suggestionsDiv.classList.remove('show');
                     selectedIndex = -1;
                 }
             });
-
-            function updateSelection(suggestions) {
-                suggestions.forEach((s, i) => {
-                    s.classList.toggle('selected', i === selectedIndex);
-                });
-                if (suggestions[selectedIndex]) {
-                    suggestions[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                }
+            function updateSel(suggestions) {
+                suggestions.forEach((s, i) => s.classList.toggle('selected', i === selectedIndex));
+                if (suggestions[selectedIndex]) suggestions[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
         })();
 
-        // Use Current Location button functionality (works for both logged in and not logged in)
+        // Use Current Location: browser geolocation + Google Geocoding (Canada only)
         (function() {
+            const apiKey = typeof google_places_api_key !== 'undefined' ? google_places_api_key : '';
             const useLocationBtn = document.getElementById('use-current-location-btn');
             if (!useLocationBtn) return;
 
@@ -625,146 +434,68 @@
                 const form = this.closest('form');
                 const locationInput = document.getElementById('location-search');
                 const distanceSelect = form.querySelector('select[name="distance"]');
-                
-                // Check if geolocation is supported
                 if (!navigator.geolocation) {
-                    alert('Geolocation is not supported by your browser. Please enter your location manually.');
+                    alert('Geolocation is not supported. Please enter your location manually.');
                     return;
                 }
-                
-                // Show loading state
                 this.classList.add('loading');
                 this.disabled = true;
                 const originalText = this.textContent;
                 this.textContent = 'Getting location...';
-                
-                // Get current location from browser
+
+                function setCoordsAndSubmit(lat, lon, locationStr) {
+                    locationInput.value = locationStr || (lat + ', ' + lon);
+                    let latInput = form.querySelector('input[name="user_lat"]');
+                    let lonInput = form.querySelector('input[name="user_lon"]');
+                    if (!latInput) { latInput = document.createElement('input'); latInput.type = 'hidden'; latInput.name = 'user_lat'; form.appendChild(latInput); }
+                    if (!lonInput) { lonInput = document.createElement('input'); lonInput.type = 'hidden'; lonInput.name = 'user_lon'; form.appendChild(lonInput); }
+                    latInput.value = lat;
+                    lonInput.value = lon;
+                    if (!distanceSelect.value) distanceSelect.value = '10';
+                    form.submit();
+                }
+
+                function done() {
+                    useLocationBtn.classList.remove('loading');
+                    useLocationBtn.disabled = false;
+                    useLocationBtn.textContent = originalText;
+                }
+
                 navigator.geolocation.getCurrentPosition(
                     function(position) {
-                        // Success: got coordinates
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
-                        
-                        // Reverse geocode to get address
-                        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1&countrycodes=ca`)
-                            .then(response => response.json())
+                        if (!apiKey) {
+                            setCoordsAndSubmit(lat, lon, lat + ', ' + lon);
+                            done();
+                            return;
+                        }
+                        const url = 'https://maps.googleapis.com/maps/api/geocode/json?latlng=' + lat + ',' + lon + '&key=' + encodeURIComponent(apiKey) + '&components=country:CA';
+                        fetch(url)
+                            .then(r => r.json())
                             .then(data => {
-                                useLocationBtn.classList.remove('loading');
-                                useLocationBtn.disabled = false;
-                                useLocationBtn.textContent = originalText;
-                                
-                                // Format location string
+                                done();
                                 let locationStr = '';
-                                if (data.address) {
-                                    const addr = data.address;
-                                    if (addr.postcode) {
-                                        locationStr = addr.postcode;
-                                        if (addr.city || addr.town || addr.village) {
-                                            locationStr += ', ' + (addr.city || addr.town || addr.village);
-                                        }
-                                        if (addr.state) {
-                                            locationStr += ', ' + addr.state;
-                                        }
-                                    } else if (addr.city || addr.town || addr.village) {
-                                        locationStr = (addr.city || addr.town || addr.village);
-                                        if (addr.state) {
-                                            locationStr += ', ' + addr.state;
-                                        }
-                                    } else {
-                                        locationStr = `${lat}, ${lon}`;
-                                    }
-                                } else {
-                                    locationStr = `${lat}, ${lon}`;
+                                if (data.status === 'OK' && data.results && data.results.length > 0) {
+                                    locationStr = data.results[0].formatted_address || '';
                                 }
-                                
-                                // Set location input
-                                locationInput.value = locationStr;
-                                
-                                // Add hidden inputs for coordinates
-                                let latInput = form.querySelector('input[name="user_lat"]');
-                                let lonInput = form.querySelector('input[name="user_lon"]');
-                                if (!latInput) {
-                                    latInput = document.createElement('input');
-                                    latInput.type = 'hidden';
-                                    latInput.name = 'user_lat';
-                                    form.appendChild(latInput);
-                                }
-                                if (!lonInput) {
-                                    lonInput = document.createElement('input');
-                                    lonInput.type = 'hidden';
-                                    lonInput.name = 'user_lon';
-                                    form.appendChild(lonInput);
-                                }
-                                latInput.value = lat;
-                                lonInput.value = lon;
-                                
-                                // Set default distance to 10km if not set
-                                if (!distanceSelect.value) {
-                                    distanceSelect.value = '10';
-                                }
-                                
-                                // Submit the form
-                                form.submit();
+                                setCoordsAndSubmit(lat, lon, locationStr);
                             })
-                            .catch(error => {
-                                useLocationBtn.classList.remove('loading');
-                                useLocationBtn.disabled = false;
-                                useLocationBtn.textContent = originalText;
-                                console.error('Reverse geocoding error:', error);
-                                // Fallback: use coordinates directly
-                                locationInput.value = `${lat}, ${lon}`;
-                                
-                                let latInput = form.querySelector('input[name="user_lat"]');
-                                let lonInput = form.querySelector('input[name="user_lon"]');
-                                if (!latInput) {
-                                    latInput = document.createElement('input');
-                                    latInput.type = 'hidden';
-                                    latInput.name = 'user_lat';
-                                    form.appendChild(latInput);
-                                }
-                                if (!lonInput) {
-                                    lonInput = document.createElement('input');
-                                    lonInput.type = 'hidden';
-                                    lonInput.name = 'user_lon';
-                                    form.appendChild(lonInput);
-                                }
-                                latInput.value = lat;
-                                lonInput.value = lon;
-                                
-                                if (!distanceSelect.value) {
-                                    distanceSelect.value = '10';
-                                }
-                                form.submit();
+                            .catch(function() {
+                                done();
+                                setCoordsAndSubmit(lat, lon, lat + ', ' + lon);
                             });
                     },
                     function(error) {
-                        // Error getting location
-                        useLocationBtn.classList.remove('loading');
-                        useLocationBtn.disabled = false;
-                        useLocationBtn.textContent = originalText;
-                        
-                        let errorMsg = 'Unable to get your location. ';
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMsg += 'Please allow location access or enter your location manually.';
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMsg += 'Location information is unavailable.';
-                                break;
-                            case error.TIMEOUT:
-                                errorMsg += 'Location request timed out.';
-                                break;
-                            default:
-                                errorMsg += 'An unknown error occurred.';
-                                break;
-                        }
-                        alert(errorMsg);
+                        done();
+                        let msg = 'Unable to get your location. ';
+                        if (error.code === error.PERMISSION_DENIED) msg += 'Please allow location access or enter your location manually.';
+                        else if (error.code === error.POSITION_UNAVAILABLE) msg += 'Location information is unavailable.';
+                        else if (error.code === error.TIMEOUT) msg += 'Location request timed out.';
+                        else msg += 'An unknown error occurred.';
+                        alert(msg);
                     },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             });
         })();

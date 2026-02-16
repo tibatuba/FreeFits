@@ -173,8 +173,10 @@
             });
         })();
 
-        // Location Autocomplete (same as create_listing.html)
+        var google_places_api_key = {{ google_places_api_key | tojson }};
+        // Location Autocomplete: Google Places API (Canada only)
         (function() {
+            const apiKey = typeof google_places_api_key !== 'undefined' ? google_places_api_key : '';
             const locationInput = document.getElementById('location');
             const suggestionsDiv = document.getElementById('location-suggestions');
             const locationSelected = document.getElementById('location-selected');
@@ -183,12 +185,9 @@
             let debounceTimer;
             let currentSuggestions = [];
             let selectedIndex = -1;
-            let isLocationSelected = true; // Start as true since we have existing value
+            let isLocationSelected = true; // true when editing existing listing with value
 
-            if (!locationInput || !suggestionsDiv) {
-                console.error('Location autocomplete elements not found');
-                return;
-            }
+            if (!locationInput || !suggestionsDiv) return;
 
             form.addEventListener('submit', function(e) {
                 if (!isLocationSelected) {
@@ -201,27 +200,19 @@
             });
 
             locationInput.addEventListener('input', function() {
-                if (locationInput.readOnly) {
-                    return;
-                }
-                
+                if (locationInput.readOnly) return;
                 const query = this.value.trim();
-                
                 clearTimeout(debounceTimer);
                 selectedIndex = -1;
                 isLocationSelected = false;
                 locationSelected.value = 'false';
                 locationError.style.display = 'none';
                 locationInput.style.borderColor = '';
-                
                 if (query.length < 2) {
                     suggestionsDiv.classList.remove('show');
                     return;
                 }
-
-                debounceTimer = setTimeout(() => {
-                    searchCanadianLocations(query);
-                }, 300);
+                debounceTimer = setTimeout(() => fetchGoogleSuggestions(query), 300);
             });
 
             locationInput.addEventListener('focus', function() {
@@ -235,194 +226,70 @@
                 }
             });
 
-            function searchCanadianLocations(query) {
-                const cleanQuery = query.replace(/\s+/g, '').toUpperCase();
-                const postalCodePattern = /^[A-Za-z]\d[A-Za-z]/;
-                
-                if (cleanQuery.length >= 6 && postalCodePattern.test(cleanQuery)) {
-                    searchPostalCode(cleanQuery);
-                } else {
-                    searchCanadianAddresses(query);
+            function fetchGoogleSuggestions(query) {
+                if (!apiKey) {
+                    suggestionsDiv.classList.remove('show');
+                    currentSuggestions = [];
+                    return;
                 }
-            }
-
-            function searchPostalCode(postalCode) {
-                let formatted = postalCode;
-                if (postalCode.length === 6) {
-                    formatted = `${postalCode.substring(0, 3)} ${postalCode.substring(3)}`;
-                } else if (postalCode.length === 7 && postalCode.includes(' ')) {
-                    formatted = postalCode;
-                }
-                
-                const url = `https://geocoder.ca/${encodeURIComponent(formatted)}?json=1`;
-                
+                const url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=' + encodeURIComponent(query) + '&components=country:ca&key=' + encodeURIComponent(apiKey);
                 fetch(url)
-                    .then(response => response.json())
+                    .then(r => r.json())
                     .then(data => {
-                        if (data && data.latt && data.longt) {
-                            const city = data.city || '';
-                            const prov = data.prov || '';
-                            const postalPrefix = formatted.substring(0, 3);
-                            const displayText = city && prov ? `${postalPrefix} ${city}, ${prov} ${formatted}` : prov ? `${postalPrefix} ${formatted}, ${prov}` : formatted;
-                            
-                            currentSuggestions = [{
-                                description: displayText,
-                                lat: parseFloat(data.latt),
-                                lon: parseFloat(data.longt),
-                                postalCode: formatted,
-                                postalPrefix: postalPrefix
-                            }];
-                            displaySuggestions(currentSuggestions);
-                        } else {
-                            searchCanadianAddresses(formatted);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching postal code:', error);
-                        searchCanadianAddresses(postalCode);
-                    });
-            }
-
-            function searchCanadianAddresses(query) {
-                const searchQuery = `${query}, Canada`;
-                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=ca&limit=10&addressdetails=1`;
-                
-                fetch(url, {
-                    headers: {
-                        'User-Agent': 'FreeFits/1.0'
-                    }
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data && data.length > 0) {
-                            const canadianResults = data.filter(item => {
-                                const address = item.address || {};
-                                const country = (address.country || '').toLowerCase();
-                                return country.includes('canada') || country === 'ca';
-                            });
-                            
-                            currentSuggestions = canadianResults.map(item => ({
-                                description: formatCanadianAddress(item),
-                                lat: parseFloat(item.lat),
-                                lon: parseFloat(item.lon),
-                                address: item.address
-                            }));
-                            displaySuggestions(currentSuggestions);
-                        } else {
+                        if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
                             suggestionsDiv.classList.remove('show');
                             currentSuggestions = [];
+                            return;
                         }
+                        const predictions = data.predictions || [];
+                        currentSuggestions = predictions.map(p => ({ description: p.description, place_id: p.place_id }));
+                        displaySuggestions(currentSuggestions);
                     })
-                    .catch(error => {
-                        console.error('Error fetching locations:', error);
+                    .catch(() => {
                         suggestionsDiv.classList.remove('show');
                         currentSuggestions = [];
                     });
             }
 
-            function formatCanadianAddress(result) {
-                const address = result.address || {};
-                const parts = [];
-                let postalPrefix = '';
-
-                if (address.postcode) {
-                    const postcode = address.postcode.replace(/\s+/g, '').toUpperCase();
-                    if (postcode.length >= 3) {
-                        postalPrefix = postcode.substring(0, 3);
-                        parts.push(postalPrefix);
-                    }
-                }
-
-                if (address.city) {
-                    parts.push(address.city);
-                } else if (address.town) {
-                    parts.push(address.town);
-                } else if (address.village) {
-                    parts.push(address.village);
-                } else if (address.municipality) {
-                    parts.push(address.municipality);
-                } else if (address.suburb) {
-                    parts.push(address.suburb);
-                }
-
-                if (address.state) {
-                    parts.push(address.state);
-                } else if (address.province) {
-                    parts.push(address.province);
-                }
-
-                if (parts.length > 0) {
-                    return parts.join(', ');
-                } else {
-                    return result.display_name || '';
-                }
-            }
-
             function displaySuggestions(results) {
-                if (!suggestionsDiv) return;
-
                 suggestionsDiv.innerHTML = '';
-
-                const otherOption = {
-                    description: 'Other',
-                    isOther: true
-                };
+                const otherOption = { description: 'Other', isOther: true };
                 const allResults = [...results, otherOption];
-
                 if (allResults.length === 0) {
                     suggestionsDiv.classList.remove('show');
                     return;
                 }
-
                 allResults.forEach((result, index) => {
                     const div = document.createElement('div');
-                    div.className = 'location-suggestion';
-                    if (index === selectedIndex) {
-                        div.classList.add('selected');
-                    }
+                    div.className = 'location-suggestion' + (index === selectedIndex ? ' selected' : '');
                     if (result.isOther) {
                         div.style.fontWeight = '600';
                         div.style.color = '#2d5a2d';
                     }
-
-                    const displayText = result.description || result.display_name || 'Unknown location';
-                    div.textContent = displayText;
-                    div.dataset.full = displayText;
-                    div.dataset.lat = result.lat || '';
-                    div.dataset.lon = result.lon || '';
+                    div.textContent = result.description || 'Unknown location';
+                    div.dataset.full = result.description || 'Unknown location';
                     div.dataset.isOther = result.isOther ? 'true' : 'false';
-
                     div.addEventListener('click', function() {
                         if (result.isOther) {
                             locationInput.value = 'Other';
-                            isLocationSelected = true;
-                            locationSelected.value = 'true';
-                            locationError.style.display = 'none';
-                            locationInput.style.borderColor = '';
-                            locationInput.readOnly = true;
                         } else {
                             locationInput.value = this.dataset.full;
-                            isLocationSelected = true;
-                            locationSelected.value = 'true';
-                            locationError.style.display = 'none';
-                            locationInput.style.borderColor = '';
-                            locationInput.readOnly = true;
                         }
+                        isLocationSelected = true;
+                        locationSelected.value = 'true';
+                        locationError.style.display = 'none';
+                        locationInput.style.borderColor = '';
+                        locationInput.readOnly = true;
                         suggestionsDiv.classList.remove('show');
                         selectedIndex = -1;
                     });
-
                     div.addEventListener('mouseenter', function() {
-                        document.querySelectorAll('.location-suggestion').forEach(s => {
-                            s.classList.remove('selected');
-                        });
+                        document.querySelectorAll('.location-suggestion').forEach(s => s.classList.remove('selected'));
                         this.classList.add('selected');
                         selectedIndex = index;
                     });
-
                     suggestionsDiv.appendChild(div);
                 });
-
                 suggestionsDiv.classList.add('show');
             }
 
@@ -435,39 +302,35 @@
 
             locationInput.addEventListener('keydown', function(e) {
                 const suggestions = suggestionsDiv.querySelectorAll('.location-suggestion');
-                
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    if (suggestions.length > 0) {
-                        selectedIndex = (selectedIndex + 1) % suggestions.length;
-                        updateSelection(suggestions);
-                    }
+                    if (suggestions.length) { selectedIndex = (selectedIndex + 1) % suggestions.length; updateSel(suggestions); }
                 } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    if (suggestions.length > 0) {
-                        selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1;
-                        updateSelection(suggestions);
+                    if (suggestions.length) { selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1; updateSel(suggestions); }
+                } else if (e.key === 'Enter' && selectedIndex >= 0 && suggestions[selectedIndex]) {
+                    e.preventDefault();
+                    const sel = suggestions[selectedIndex];
+                    if (sel.dataset.isOther === 'true') {
+                        locationInput.value = 'Other';
+                    } else {
+                        locationInput.value = sel.dataset.full;
                     }
-                } else if (e.key === 'Enter') {
-                    if (selectedIndex >= 0 && suggestions[selectedIndex]) {
-                        e.preventDefault();
-                        locationInput.value = suggestions[selectedIndex].dataset.full;
-                        suggestionsDiv.classList.remove('show');
-                        selectedIndex = -1;
-                    }
+                    isLocationSelected = true;
+                    locationSelected.value = 'true';
+                    locationError.style.display = 'none';
+                    locationInput.style.borderColor = '';
+                    locationInput.readOnly = true;
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
                 } else if (e.key === 'Escape') {
                     suggestionsDiv.classList.remove('show');
                     selectedIndex = -1;
                 }
             });
-
-            function updateSelection(suggestions) {
-                suggestions.forEach((s, i) => {
-                    s.classList.toggle('selected', i === selectedIndex);
-                });
-                if (suggestions[selectedIndex]) {
-                    suggestions[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                }
+            function updateSel(suggestions) {
+                suggestions.forEach((s, i) => s.classList.toggle('selected', i === selectedIndex));
+                if (suggestions[selectedIndex]) suggestions[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
         })();
 

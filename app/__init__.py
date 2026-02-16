@@ -68,6 +68,11 @@ def create_app():
     from app.routes import main
     app.register_blueprint(main)
 
+    # Inject Google Places API key for frontend location autocomplete (Canada-only)
+    @app.context_processor
+    def inject_google_places_key():
+        return {"google_places_api_key": (cfg.GOOGLE_PLACES_API_KEY or "")}
+
     # Prevent browser from caching HTML so deploys show up immediately
     @app.after_request
     def add_no_cache_headers(response):
