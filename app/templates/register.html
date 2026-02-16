@@ -153,12 +153,7 @@
             });
 
             function fetchGoogleSuggestions(query) {
-                if (!apiKey) {
-                    suggestionsDiv.classList.remove('show');
-                    currentSuggestions = [];
-                    return;
-                }
-                const url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=' + encodeURIComponent(query) + '&components=country:ca&key=' + encodeURIComponent(apiKey);
+                const url = '/api/place-autocomplete?input=' + encodeURIComponent(query);
                 fetch(url)
                     .then(r => r.json())
                     .then(data => {

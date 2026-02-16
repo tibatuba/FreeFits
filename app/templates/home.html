@@ -227,7 +227,6 @@ image.png<!DOCTYPE html>
     </footer>
 
     <script>
-        var google_places_api_key = {{ google_places_api_key | tojson }};
         // Searchable category dropdown
         (function() {
             const categorySelect = document.getElementById('category-select');
@@ -317,9 +316,8 @@ image.png<!DOCTYPE html>
             buildDropdown();
         })();
 
-        // Location Autocomplete: Google Places API (Canada only)
+        // Location Autocomplete via our API (Canada only; avoids CORS)
         (function() {
-            const apiKey = typeof google_places_api_key !== 'undefined' ? google_places_api_key : '';
             const locationInput = document.getElementById('location-search');
             const suggestionsDiv = document.getElementById('location-suggestions');
             let debounceTimer;
@@ -327,10 +325,6 @@ image.png<!DOCTYPE html>
             let selectedIndex = -1;
 
             if (!locationInput || !suggestionsDiv) return;
-            if (!apiKey) {
-                locationInput.placeholder = 'Enter city or postal code (e.g. Toronto, ON or M5H 2N2)';
-                return;
-            }
 
             locationInput.addEventListener('input', function() {
                 const query = this.value.trim();
@@ -348,7 +342,7 @@ image.png<!DOCTYPE html>
             });
 
             function fetchGoogleSuggestions(query) {
-                const url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=' + encodeURIComponent(query) + '&components=country:ca&key=' + encodeURIComponent(apiKey);
+                const url = '/api/place-autocomplete?input=' + encodeURIComponent(query);
                 fetch(url)
                     .then(r => r.json())
                     .then(data => {
@@ -424,9 +418,8 @@ image.png<!DOCTYPE html>
             }
         })();
 
-        // Use Current Location: browser geolocation + Google Geocoding (Canada only)
+        // Use Current Location: browser geolocation + our geocode proxy (Canada only)
         (function() {
-            const apiKey = typeof google_places_api_key !== 'undefined' ? google_places_api_key : '';
             const useLocationBtn = document.getElementById('use-current-location-btn');
             if (!useLocationBtn) return;
 
@@ -465,12 +458,7 @@ image.png<!DOCTYPE html>
                     function(position) {
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
-                        if (!apiKey) {
-                            setCoordsAndSubmit(lat, lon, lat + ', ' + lon);
-                            done();
-                            return;
-                        }
-                        const url = 'https://maps.googleapis.com/maps/api/geocode/json?latlng=' + lat + ',' + lon + '&key=' + encodeURIComponent(apiKey) + '&components=country:CA';
+                        const url = '/api/geocode/reverse?latlng=' + encodeURIComponent(lat + ',' + lon);
                         fetch(url)
                             .then(r => r.json())
                             .then(data => {

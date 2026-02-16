@@ -1,8 +1,9 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app, send_from_directory
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app, send_from_directory, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
+import requests
 from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, update_listing, delete_listing, get_listings_by_user, create_message, get_conversation_messages, get_user_conversations, get_or_create_conversation_id, mark_messages_as_read, get_unread_count
 from app.geocoding import geocode_location, geocode_postal_code
 from app.image_validation import validate_clothing_image, validate_clothing_image_api4ai, validate_clothing_image_rekognition
@@ -1013,6 +1014,46 @@ def delete_listing_route(listing_id):
         current_app.logger.error(f"ERROR deleting listing: {e}")
         flash(f"Error deleting listing: {str(e)}", "error")
         return redirect(url_for("main.view_listing", listing_id=listing_id))
+
+# Proxy for Google Places Autocomplete (avoids CORS; Canada only)
+@main.route("/api/place-autocomplete")
+def api_place_autocomplete():
+    from config import get_config
+    key = (get_config().GOOGLE_PLACES_API_KEY or "").strip()
+    if not key:
+        return jsonify({"status": "REQUEST_DENIED", "predictions": []})
+    q = request.args.get("input", "").strip()
+    if not q:
+        return jsonify({"status": "ZERO_RESULTS", "predictions": []})
+    url = "https://maps.googleapis.com/maps/api/place/autocomplete/json"
+    params = {"input": q, "components": "country:ca", "key": key}
+    try:
+        r = requests.get(url, params=params, timeout=8)
+        r.raise_for_status()
+        return jsonify(r.json())
+    except Exception as e:
+        current_app.logger.warning(f"Place autocomplete proxy error: {e}")
+        return jsonify({"status": "ERROR", "predictions": []})
+
+# Proxy for Google Geocoding reverse (avoids CORS; Canada only)
+@main.route("/api/geocode/reverse")
+def api_geocode_reverse():
+    from config import get_config
+    key = (get_config().GOOGLE_PLACES_API_KEY or "").strip()
+    if not key:
+        return jsonify({"status": "REQUEST_DENIED", "results": []})
+    latlng = request.args.get("latlng", "").strip()
+    if not latlng:
+        return jsonify({"status": "ZERO_RESULTS", "results": []})
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {"latlng": latlng, "key": key, "components": "country:CA"}
+    try:
+        r = requests.get(url, params=params, timeout=8)
+        r.raise_for_status()
+        return jsonify(r.json())
+    except Exception as e:
+        current_app.logger.warning(f"Geocode reverse proxy error: {e}")
+        return jsonify({"status": "ERROR", "results": []})
 
 # Serve uploaded images
 @main.route("/uploads/<filename>")
