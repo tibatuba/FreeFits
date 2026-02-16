@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from flask import Flask
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -5,8 +7,12 @@ from pymongo.errors import ConfigurationError
 from werkzeug.security import generate_password_hash  # ensure available
 from config import get_config
 
+
 def create_app():
-    load_dotenv()
+    # Load .env from project root (so it works when gunicorn starts from any CWD)
+    root = Path(__file__).resolve().parent.parent
+    load_dotenv(root / ".env")
+
     app = Flask(__name__)
 
     # Load config
