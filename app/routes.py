@@ -1015,13 +1015,36 @@ def delete_listing_route(listing_id):
         flash(f"Error deleting listing: {str(e)}", "error")
         return redirect(url_for("main.view_listing", listing_id=listing_id))
 
+# Diagnostic: check if location API key works (open in browser: /api/location-status)
+@main.route("/api/location-status")
+def api_location_status():
+    from config import get_config
+    key = (get_config().GOOGLE_PLACES_API_KEY or "").strip()
+    out = {"key_set": bool(key), "google_status": None, "error_message": None}
+    if not key:
+        return jsonify(out)
+    try:
+        r = requests.get(
+            "https://maps.googleapis.com/maps/api/place/autocomplete/json",
+            params={"input": "toronto", "components": "country:ca", "key": key},
+            timeout=8,
+        )
+        data = r.json()
+        out["google_status"] = data.get("status")
+        if data.get("status") != "OK" and data.get("status") != "ZERO_RESULTS":
+            out["error_message"] = data.get("error_message", "No error_message from Google")
+    except Exception as e:
+        out["google_status"] = "ERROR"
+        out["error_message"] = str(e)
+    return jsonify(out)
+
 # Proxy for Google Places Autocomplete (avoids CORS; Canada only)
 @main.route("/api/place-autocomplete")
 def api_place_autocomplete():
     from config import get_config
     key = (get_config().GOOGLE_PLACES_API_KEY or "").strip()
     if not key:
-        return jsonify({"status": "REQUEST_DENIED", "predictions": []})
+        return jsonify({"status": "REQUEST_DENIED", "predictions": [], "error_message": "API key not set"})
     q = request.args.get("input", "").strip()
     if not q:
         return jsonify({"status": "ZERO_RESULTS", "predictions": []})
@@ -1030,10 +1053,13 @@ def api_place_autocomplete():
     try:
         r = requests.get(url, params=params, timeout=8)
         r.raise_for_status()
-        return jsonify(r.json())
+        data = r.json()
+        if data.get("status") not in ("OK", "ZERO_RESULTS"):
+            current_app.logger.warning(f"Place autocomplete Google status={data.get('status')} error_message={data.get('error_message')}")
+        return jsonify(data)
     except Exception as e:
         current_app.logger.warning(f"Place autocomplete proxy error: {e}")
-        return jsonify({"status": "ERROR", "predictions": []})
+        return jsonify({"status": "ERROR", "predictions": [], "error_message": str(e)})
 
 # Proxy for Google Geocoding reverse (avoids CORS; Canada only)
 @main.route("/api/geocode/reverse")
@@ -1041,7 +1067,7 @@ def api_geocode_reverse():
     from config import get_config
     key = (get_config().GOOGLE_PLACES_API_KEY or "").strip()
     if not key:
-        return jsonify({"status": "REQUEST_DENIED", "results": []})
+        return jsonify({"status": "REQUEST_DENIED", "results": [], "error_message": "API key not set"})
     latlng = request.args.get("latlng", "").strip()
     if not latlng:
         return jsonify({"status": "ZERO_RESULTS", "results": []})
@@ -1050,10 +1076,19 @@ def api_geocode_reverse():
     try:
         r = requests.get(url, params=params, timeout=8)
         r.raise_for_status()
-        return jsonify(r.json())
+        data = r.json()
+        if data.get("status") not in ("OK", "ZERO_RESULTS"):
+            current_app.logger.warning(f"Geocode reverse Google status={data.get('status')} error_message={data.get('error_message')}")
+        return jsonify(data)
     except Exception as e:
         current_app.logger.warning(f"Geocode reverse proxy error: {e}")
-        return jsonify({"status": "ERROR", "results": []})
+        return jsonify({"status": "ERROR", "results": [], "error_message": str(e)})
+
+# Favicon (serve header logo to avoid 404)
+@main.route("/favicon.ico")
+def favicon():
+    folder = os.path.join(current_app.root_path, "static", "images")
+    return send_from_directory(folder, "headerlogo.png", mimetype="image/png")
 
 # Serve uploaded images
 @main.route("/uploads/<filename>")
