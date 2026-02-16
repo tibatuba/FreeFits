@@ -12,6 +12,13 @@ import tempfile
 
 main = Blueprint("main", __name__)
 
+
+@main.route("/api/ping")
+def api_ping():
+    """Simple health check; confirms the deployed app has the latest routes."""
+    return jsonify({"ok": True})
+
+
 def get_image_url(image_key):
     """
     Helper function to get the URL for an image.
