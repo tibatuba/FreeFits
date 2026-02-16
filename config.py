@@ -18,6 +18,8 @@ class Config:
     # AWS S3 Configuration for image storage
     AWS_S3_BUCKET_NAME = os.getenv("AWS_S3_BUCKET_NAME", "")
     AWS_S3_REGION = os.getenv("AWS_S3_REGION", "")  # Optional, defaults to AWS_REGION if not set
+    # Admin: username that can access /admin/listings to delete any listing (set in .env)
+    ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
 
 
 def get_config():
