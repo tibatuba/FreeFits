@@ -109,6 +109,7 @@ image.png<!DOCTYPE html>
                                 <input type="text" name="location" id="location-search" placeholder="Your postal code or city (e.g., M5H 2N2 or Toronto, ON)" 
                                        value="{{ location_filter }}" class="location-input" autocomplete="off">
                                 <div id="location-suggestions" class="location-suggestions"></div>
+                                <div id="location-api-error" class="location-api-error" style="display:none; font-size:0.85rem; color:#c00; margin-top:4px;"></div>
                             </div>
                         </div>
                         <div class="input-chip small-chip">
@@ -341,7 +342,9 @@ image.png<!DOCTYPE html>
                 if (this.value.trim().length >= 2 && currentSuggestions.length > 0) suggestionsDiv.classList.add('show');
             });
 
+            const locationApiError = document.getElementById('location-api-error');
             function fetchGoogleSuggestions(query) {
+                if (locationApiError) { locationApiError.style.display = 'none'; locationApiError.textContent = ''; }
                 const url = '/api/place-autocomplete?input=' + encodeURIComponent(query);
                 fetch(url)
                     .then(r => r.json())
@@ -349,6 +352,10 @@ image.png<!DOCTYPE html>
                         if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
                             suggestionsDiv.classList.remove('show');
                             currentSuggestions = [];
+                            if (locationApiError && (data.error_message || data.status === 'REQUEST_DENIED')) {
+                                locationApiError.textContent = 'Location suggestions unavailable. Check API key on server.';
+                                locationApiError.style.display = 'block';
+                            }
                             return;
                         }
                         const predictions = data.predictions || [];
@@ -358,6 +365,10 @@ image.png<!DOCTYPE html>
                     .catch(() => {
                         suggestionsDiv.classList.remove('show');
                         currentSuggestions = [];
+                        if (locationApiError) {
+                            locationApiError.textContent = 'Location suggestions unavailable.';
+                            locationApiError.style.display = 'block';
+                        }
                     });
             }
 
