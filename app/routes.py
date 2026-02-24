@@ -25,7 +25,7 @@ def require_admin():
     if not username:
         abort(403)
     db = getattr(current_app, "mongo_db", None)
-    if not db:
+    if db is None:
         abort(403)
     user = db["users"].find_one({"username": username})
     if not user or user.get("role") != "admin":
@@ -226,7 +226,7 @@ def delete_account():
         flash("Please log in to manage your account.", "error")
         return redirect(url_for("main.login"))
     db = getattr(current_app, "mongo_db", None)
-    if not db:
+    if db is None:
         flash("Service unavailable.", "error")
         return redirect(url_for("main.home"))
     if request.method == "POST":
@@ -310,7 +310,7 @@ def flag_listing(listing_id):
         flash("Please log in to report a listing.", "error")
         return redirect(url_for("main.login"))
     db = getattr(current_app, "mongo_db", None)
-    if not db:
+    if db is None:
         flash("Service unavailable.", "error")
         return redirect(url_for("main.view_listing", listing_id=listing_id))
     listing = get_listing_by_id(db, listing_id)
@@ -1169,7 +1169,7 @@ def api_geocode_reverse():
 def admin_flagged():
     require_admin()
     db = getattr(current_app, "mongo_db", None)
-    if not db:
+    if db is None:
         flash("Database not available.", "error")
         return redirect(url_for("main.home"))
     # Show open flags first, then resolved
@@ -1189,7 +1189,7 @@ def admin_flagged():
 def admin_resolve_flag(flag_id):
     require_admin()
     db = getattr(current_app, "mongo_db", None)
-    if not db:
+    if db is None:
         flash("Database not available.", "error")
         return redirect(url_for("main.admin_flagged"))
     status = request.form.get("status", "resolved")  # "resolved" or "dismissed"
