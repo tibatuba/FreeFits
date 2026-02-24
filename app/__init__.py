@@ -90,7 +90,7 @@ def create_app():
     def inject_is_admin():
         is_admin = False
         username = session.get("username")
-        if username and app.mongo_db:
+        if username and app.mongo_db is not None:
             user = app.mongo_db["users"].find_one({"username": username})
             is_admin = (user or {}).get("role") == "admin"
         return {"is_admin": is_admin}
