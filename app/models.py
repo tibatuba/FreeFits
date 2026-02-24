@@ -574,3 +574,151 @@ def get_unread_count(db, username):
         "receiver_username": username,
         "is_read": False
     })
+
+
+# --- Flagged listings (moderation) ---
+
+class Flag:
+    def __init__(self, id, listing_id, reporter_username, reason, status="open", created_at=None, resolved_at=None):
+        self.id = id
+        self.listing_id = listing_id
+        self.reporter_username = reporter_username
+        self.reason = reason
+        self.status = status  # "open" | "resolved" | "dismissed"
+        self.created_at = created_at if isinstance(created_at, datetime) else (created_at or datetime.now())
+        self.resolved_at = resolved_at
+
+    @classmethod
+    def from_dict(cls, doc):
+        return cls(
+            id=str(doc.get("_id", "")),
+            listing_id=doc.get("listing_id", ""),
+            reporter_username=doc.get("reporter_username", ""),
+            reason=doc.get("reason", ""),
+            status=doc.get("status", "open"),
+            created_at=doc.get("created_at", datetime.now()),
+            resolved_at=doc.get("resolved_at")
+        )
+
+    def to_dict(self):
+        d = {
+            "listing_id": self.listing_id,
+            "reporter_username": self.reporter_username,
+            "reason": self.reason,
+            "status": self.status,
+            "created_at": self.created_at,
+        }
+        if self.resolved_at:
+            d["resolved_at"] = self.resolved_at
+        return d
+
+
+def get_flags_collection(db):
+    if db is None:
+        return None
+    return db["flags"]
+
+
+def create_flag(db, listing_id, reporter_username, reason):
+    """Create a new flag. Returns the Flag or None."""
+    coll = get_flags_collection(db)
+    if coll is None:
+        return None
+    flag = Flag(
+        id="",
+        listing_id=listing_id,
+        reporter_username=reporter_username,
+        reason=reason or "No reason given",
+        status="open",
+        created_at=datetime.utcnow(),
+    )
+    result = coll.insert_one(flag.to_dict())
+    if result.inserted_id:
+        flag.id = str(result.inserted_id)
+        return flag
+    return None
+
+
+def get_all_flagged_listings(db, status=None):
+    """
+    Get all flags, optionally filtered by status, with listing details.
+    Returns list of dicts: { "flag": Flag, "listing": Listing or None }.
+    """
+    coll = get_flags_collection(db)
+    if coll is None:
+        return []
+    query = {} if status is None else {"status": status}
+    cursor = coll.find(query).sort("created_at", -1)
+    out = []
+    for doc in cursor:
+        f = Flag.from_dict(doc)
+        listing = get_listing_by_id(db, f.listing_id)
+        out.append({"flag": f, "listing": listing})
+    return out
+
+
+def get_flags_for_listing(db, listing_id, status="open"):
+    """Get open (or given status) flags for a listing."""
+    coll = get_flags_collection(db)
+    if coll is None:
+        return []
+    cursor = coll.find({"listing_id": listing_id, "status": status})
+    return [Flag.from_dict(doc) for doc in cursor]
+
+
+def resolve_flag(db, flag_id, status="resolved"):
+    """Set flag status to resolved or dismissed. Returns True if updated."""
+    coll = get_flags_collection(db)
+    if coll is None:
+        return False
+    try:
+        result = coll.update_one(
+            {"_id": ObjectId(flag_id)},
+            {"$set": {"status": status, "resolved_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+    except Exception:
+        return False
+
+
+def count_open_flags_for_listing(db, listing_id):
+    """Number of open flags for a listing."""
+    coll = get_flags_collection(db)
+    if coll is None:
+        return 0
+    return coll.count_documents({"listing_id": listing_id, "status": "open"})
+
+
+def delete_user_and_data(db, username):
+    """
+    Permanently delete a user and all their data: profile, listings, messages they're in, and anonymize flags they reported.
+    Returns True if the user was found and deleted.
+    """
+    if db is None:
+        return False
+    users = db["users"]
+    if not users.find_one({"username": username}):
+        return False
+    # Delete all listings by this user
+    listings_coll = get_listings_collection(db)
+    if listings_coll:
+        listings_coll.delete_many({"user_id": username})
+    # Delete all messages where they are sender or receiver
+    messages_coll = get_messages_collection(db)
+    if messages_coll:
+        messages_coll.delete_many({
+            "$or": [
+                {"sender_username": username},
+                {"receiver_username": username}
+            ]
+        })
+    # Anonymize flags they reported (keep for moderation history)
+    flags_coll = get_flags_collection(db)
+    if flags_coll:
+        flags_coll.update_many(
+            {"reporter_username": username},
+            {"$set": {"reporter_username": "[deleted]"}}
+        )
+    # Delete the user
+    result = users.delete_one({"username": username})
+    return result.deleted_count > 0

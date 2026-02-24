@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flagged listings - FreeFits Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=4">
+    <style>
+        .flagged-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        .flagged-table th, .flagged-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid #ddd; }
+        .flagged-table th { background: #f5f5f5; font-weight: 600; }
+        .admin-page { max-width: 960px; margin: 0 auto; padding: 1rem; }
+        .resolve-btn { padding: 0.25rem 0.5rem; font-size: 0.85rem; margin-right: 0.25rem; }
+        .section-heading { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1 class="site-logo">
+                <a href="{{ url_for('main.home') }}" class="logo-link">
+                    <img src="{{ url_for('static', filename='images/headerlogo.png') }}" alt="FreeFits Logo" class="logo-img">
+                </a>
+            </h1>
+            <nav class="user-nav">
+                <span class="welcome">Admin: {{ username }}</span>
+                <a href="{{ url_for('main.admin_flagged') }}" class="nav-link">Flagged</a>
+                <a href="{{ url_for('main.home') }}" class="nav-link">Home</a>
+                <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="admin-page">
+        <h1>Flagged listings</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <h2 class="section-heading">Open reports</h2>
+        {% if open_items %}
+            <table class="flagged-table">
+                <thead>
+                    <tr>
+                        <th>Listing</th>
+                        <th>Reported by</th>
+                        <th>Reason</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in open_items %}
+                        <tr>
+                            <td>
+                                {% if item.listing %}
+                                    <a href="{{ url_for('main.view_listing', listing_id=item.listing.id) }}">{{ item.listing.title }}</a>
+                                {% else %}
+                                    <span class="muted">(listing deleted)</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.flag.reporter_username }}</td>
+                            <td>{{ item.flag.reason }}</td>
+                            <td>{{ item.flag.created_at.strftime('%Y-%m-%d %H:%M') if item.flag.created_at else '-' }}</td>
+                            <td>
+                                <form action="{{ url_for('main.admin_resolve_flag', flag_id=item.flag.id) }}" method="post" style="display: inline;">
+                                    <input type="hidden" name="status" value="resolved">
+                                    <button type="submit" class="resolve-btn">Resolve</button>
+                                </form>
+                                <form action="{{ url_for('main.admin_resolve_flag', flag_id=item.flag.id) }}" method="post" style="display: inline;">
+                                    <input type="hidden" name="status" value="dismissed">
+                                    <button type="submit" class="resolve-btn">Dismiss</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="muted">No open reports.</p>
+        {% endif %}
+
+        <h2 class="section-heading">Resolved / Dismissed</h2>
+        {% if resolved_items %}
+            <table class="flagged-table">
+                <thead>
+                    <tr>
+                        <th>Listing</th>
+                        <th>Reported by</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in resolved_items %}
+                        <tr>
+                            <td>
+                                {% if item.listing %}
+                                    <a href="{{ url_for('main.view_listing', listing_id=item.listing.id) }}">{{ item.listing.title }}</a>
+                                {% else %}
+                                    <span class="muted">(listing deleted)</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.flag.reporter_username }}</td>
+                            <td>{{ item.flag.reason }}</td>
+                            <td>{{ item.flag.status }}</td>
+                            <td>{{ item.flag.created_at.strftime('%Y-%m-%d %H:%M') if item.flag.created_at else '-' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="muted">None yet.</p>
+        {% endif %}
+    </main>
+</body>
+</html>

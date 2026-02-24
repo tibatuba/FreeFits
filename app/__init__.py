@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, session
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError
@@ -60,6 +60,12 @@ def create_app():
         except Exception as e:
             # Index might already exist, or coordinates might not be present yet
             print(f"Note: Geospatial index creation: {e}")
+
+        # Ensure indexes for flags (moderation)
+        flags = db["flags"]
+        flags.create_index("listing_id")
+        flags.create_index("status")
+        flags.create_index("created_at")
         
         print("MongoDB connected successfully!")
     except Exception as e:
@@ -78,6 +84,16 @@ def create_app():
     @app.context_processor
     def inject_google_places_key():
         return {"google_places_api_key": (cfg.GOOGLE_PLACES_API_KEY or "")}
+
+    # Inject is_admin so templates can show "Flagged" link only to admins
+    @app.context_processor
+    def inject_is_admin():
+        is_admin = False
+        username = session.get("username")
+        if username and app.mongo_db:
+            user = app.mongo_db["users"].find_one({"username": username})
+            is_admin = (user or {}).get("role") == "admin"
+        return {"is_admin": is_admin}
 
     # Prevent browser from caching HTML so deploys show up immediately
     @app.after_request

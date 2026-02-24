@@ -1,16 +1,35 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app, send_from_directory, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app, send_from_directory, jsonify, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
 import requests
-from app.models import get_latest_listings, search_listings, get_listing_by_id, create_listing, update_listing, delete_listing, get_listings_by_user, create_message, get_conversation_messages, get_user_conversations, get_or_create_conversation_id, mark_messages_as_read, get_unread_count
+from app.models import (
+    get_latest_listings, search_listings, get_listing_by_id, create_listing, update_listing, delete_listing,
+    get_listings_by_user, create_message, get_conversation_messages, get_user_conversations, get_or_create_conversation_id,
+    mark_messages_as_read, get_unread_count,
+    create_flag, get_all_flagged_listings, resolve_flag,
+    delete_user_and_data,
+)
 from app.geocoding import geocode_location, geocode_postal_code
 from app.image_validation import validate_clothing_image, validate_clothing_image_api4ai, validate_clothing_image_rekognition
 from app.s3_storage import upload_image_to_s3, get_s3_image_url, delete_image_from_s3, check_s3_configured
 import tempfile
 
 main = Blueprint("main", __name__)
+
+
+def require_admin():
+    """Require current user to be admin. Call at start of admin routes. Aborts with 403 if not."""
+    username = session.get("username")
+    if not username:
+        abort(403)
+    db = getattr(current_app, "mongo_db", None)
+    if not db:
+        abort(403)
+    user = db["users"].find_one({"username": username})
+    if not user or user.get("role") != "admin":
+        abort(403)
 
 
 @main.route("/api/ping")
@@ -198,6 +217,32 @@ def logout():
     session.pop("username", None)  # Remove username from session
     return redirect(url_for("main.home"))
 
+
+# Delete account (with confirmation)
+@main.route("/account/delete", methods=["GET", "POST"])
+def delete_account():
+    username = session.get("username")
+    if not username:
+        flash("Please log in to manage your account.", "error")
+        return redirect(url_for("main.login"))
+    db = getattr(current_app, "mongo_db", None)
+    if not db:
+        flash("Service unavailable.", "error")
+        return redirect(url_for("main.home"))
+    if request.method == "POST":
+        confirm = (request.form.get("confirm") or "").strip()
+        if confirm != username:
+            flash("Confirmation did not match your username. Account was not deleted.", "error")
+            return redirect(url_for("main.delete_account"))
+        if delete_user_and_data(db, username):
+            session.pop("username", None)
+            flash("Your account and all associated data have been permanently deleted.", "success")
+            return redirect(url_for("main.home"))
+        flash("Could not delete account. Please try again.", "error")
+        return redirect(url_for("main.delete_account"))
+    return render_template("delete_account.html", username=username)
+
+
 # Register route
 @main.route("/register", methods=["GET", "POST"])
 def register():
@@ -240,6 +285,7 @@ def register():
         if geocode_result:
             latitude, longitude, formatted_location = geocode_result
         
+        # Everyone gets role "user" on signup. Only you can make someone admin by updating the DB (e.g. in MongoDB: db.users.updateOne({ username: "x" }, { $set: { role: "admin" } })).
         users.insert_one({
             "username": username,
             "email": email,
@@ -247,13 +293,40 @@ def register():
             "location": location,
             "latitude": latitude,
             "longitude": longitude,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
+            "role": "user",
         })
 
         session["username"] = username
         return redirect(url_for("main.home"))
 
     return render_template("register.html")
+
+# --- Flag listing (report) - any logged-in user (except owner) ---
+@main.route("/listing/<listing_id>/flag", methods=["GET", "POST"])
+def flag_listing(listing_id):
+    username = session.get("username")
+    if not username:
+        flash("Please log in to report a listing.", "error")
+        return redirect(url_for("main.login"))
+    db = getattr(current_app, "mongo_db", None)
+    if not db:
+        flash("Service unavailable.", "error")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
+    listing = get_listing_by_id(db, listing_id)
+    if not listing:
+        flash("Listing not found.", "error")
+        return redirect(url_for("main.home"))
+    if listing.user_id == username:
+        flash("You cannot report your own listing.", "error")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
+    if request.method == "POST":
+        reason = (request.form.get("reason") or "").strip() or "No reason given"
+        create_flag(db, listing_id, username, reason)
+        flash("Thank you. This listing has been reported for review.", "success")
+        return redirect(url_for("main.view_listing", listing_id=listing_id))
+    return render_template("flag_listing.html", listing=listing, username=username)
+
 
 # View individual listing route
 @main.route("/listing/<listing_id>")
@@ -1090,6 +1163,44 @@ def api_geocode_reverse():
     except Exception as e:
         current_app.logger.warning(f"Geocode reverse proxy error: {e}")
         return jsonify({"status": "ERROR", "results": [], "error_message": str(e)})
+
+# --- Admin: view flagged posts (moderation) ---
+@main.route("/admin/flagged")
+def admin_flagged():
+    require_admin()
+    db = getattr(current_app, "mongo_db", None)
+    if not db:
+        flash("Database not available.", "error")
+        return redirect(url_for("main.home"))
+    # Show open flags first, then resolved
+    flagged = get_all_flagged_listings(db)
+    open_items = [x for x in flagged if x["flag"].status == "open"]
+    resolved_items = [x for x in flagged if x["flag"].status != "open"]
+    username = session.get("username")
+    return render_template(
+        "admin/flagged.html",
+        username=username,
+        open_items=open_items,
+        resolved_items=resolved_items,
+    )
+
+
+@main.route("/admin/flag/<flag_id>/resolve", methods=["POST"])
+def admin_resolve_flag(flag_id):
+    require_admin()
+    db = getattr(current_app, "mongo_db", None)
+    if not db:
+        flash("Database not available.", "error")
+        return redirect(url_for("main.admin_flagged"))
+    status = request.form.get("status", "resolved")  # "resolved" or "dismissed"
+    if status not in ("resolved", "dismissed"):
+        status = "resolved"
+    if resolve_flag(db, flag_id, status):
+        flash("Flag marked as " + status + ".", "success")
+    else:
+        flash("Could not update flag.", "error")
+    return redirect(url_for("main.admin_flagged"))
+
 
 # Favicon (serve header logo to avoid 404)
 @main.route("/favicon.ico")
