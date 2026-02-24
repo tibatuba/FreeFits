@@ -89,10 +89,13 @@ def create_app():
     @app.context_processor
     def inject_is_admin():
         is_admin = False
-        username = session.get("username")
-        if username and app.mongo_db is not None:
-            user = app.mongo_db["users"].find_one({"username": username})
-            is_admin = (user or {}).get("role") == "admin"
+        try:
+            username = session.get("username")
+            if username and app.mongo_db is not None:
+                user = app.mongo_db["users"].find_one({"username": username})
+                is_admin = (user or {}).get("role") == "admin"
+        except Exception:
+            pass
         return {"is_admin": is_admin}
 
     # Prevent browser from caching HTML so deploys show up immediately
