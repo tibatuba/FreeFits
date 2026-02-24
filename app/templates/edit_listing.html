@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Listing - FreeFits</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=4">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1><a href="{{ url_for('main.home') }}" style="text-decoration: none; color: inherit;">FreeFits</a></h1>
+            <nav class="user-nav">
+                {% if username %}
+                    <span class="welcome">Welcome, {{ username }}!</span>
+                    <a href="{{ url_for('main.my_listings') }}" class="nav-link">My Listings</a>
+                    <a href="{{ url_for('main.logout') }}" class="nav-link">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
+                    <a href="{{ url_for('main.register') }}" class="nav-link">Register</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="create-listing-page">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="create-container">
+            <h2>Edit Listing</h2>
+            <p class="subtitle">Update your listing information</p>
+
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+
+            <form action="{{ url_for('main.edit_listing', listing_id=listing.id) }}" method="POST" class="create-form" enctype="multipart/form-data">
+                <label for="image">Item Image</label>
+                {% if image_url %}
+                    <div style="margin-bottom: 0.5rem;">
+                        <img src="{{ image_url }}" alt="Current image" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;">
+                        <p style="color: #666; font-size: 0.85rem; margin-top: 0.25rem;">Current image</p>
+                    </div>
+                {% elif listing.images and listing.images|length > 0 %}
+                    <div style="margin-bottom: 0.5rem;">
+                        <img src="{{ url_for('main.uploaded_file', filename=listing.images[0]) }}" alt="Current image" style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 1px solid #ddd;">
+                        <p style="color: #666; font-size: 0.85rem; margin-top: 0.25rem;">Current image</p>
+                    </div>
+                {% endif %}
+                <input type="file" id="image" name="image" accept="image/*">
+                <small style="color: #666; font-size: 0.85rem;">Upload a new image to replace the current one (optional)</small>
+
+                <label for="title">Title *</label>
+                <input type="text" id="title" name="title" value="{{ listing.title }}" placeholder="e.g., Organic Cotton T-Shirt" required>
+
+                <label for="description">Description *</label>
+                <textarea id="description" name="description" rows="5" placeholder="Describe your item in detail..." required>{{ listing.description }}</textarea>
+
+                <label for="category">Category *</label>
+                <select id="category" name="category" required>
+                    <option value="">Select a category</option>
+                    <option value="Tops" {% if listing.category == "Tops" %}selected{% endif %}>Tops</option>
+                    <option value="Dresses" {% if listing.category == "Dresses" %}selected{% endif %}>Dresses</option>
+                    <option value="Jackets" {% if listing.category == "Jackets" %}selected{% endif %}>Jackets</option>
+                    <option value="Pants" {% if listing.category == "Pants" %}selected{% endif %}>Pants</option>
+                    <option value="Shoes" {% if listing.category == "Shoes" %}selected{% endif %}>Shoes</option>
+                    <option value="Accessories" {% if listing.category == "Accessories" %}selected{% endif %}>Accessories</option>
+                    <option value="Sweaters" {% if listing.category == "Sweaters" %}selected{% endif %}>Sweaters</option>
+                    <option value="Skirts" {% if listing.category == "Skirts" %}selected{% endif %}>Skirts</option>
+                </select>
+
+                <label for="size">Size *</label>
+                <div class="custom-multi-select-wrapper">
+                    <div class="custom-multi-select" id="size-select">
+                        <div class="custom-multi-select-display">
+                            <span class="custom-multi-select-placeholder" id="size-placeholder">Select size(s)</span>
+                            <span class="custom-multi-select-arrow">▼</span>
+                        </div>
+                        <div class="custom-multi-select-dropdown" id="size-dropdown">
+                            {% set size_list = listing.size.split(', ') if listing.size else [] %}
+                            {% if size_list|length == 0 and listing.size %}
+                                {% set size_list = [listing.size] %}
+                            {% endif %}
+                            <div class="custom-multi-select-option" data-value="Small">
+                                <input type="checkbox" id="size-small" value="Small" name="size" {% if "Small" in size_list %}checked{% endif %}>
+                                <label for="size-small">Small</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="Medium">
+                                <input type="checkbox" id="size-medium" value="Medium" name="size" {% if "Medium" in size_list %}checked{% endif %}>
+                                <label for="size-medium">Medium</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="Large">
+                                <input type="checkbox" id="size-large" value="Large" name="size" {% if "Large" in size_list %}checked{% endif %}>
+                                <label for="size-large">Large</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="XL">
+                                <input type="checkbox" id="size-xl" value="XL" name="size" {% if "XL" in size_list %}checked{% endif %}>
+                                <label for="size-xl">XL</label>
+                            </div>
+                            <div class="custom-multi-select-option" data-value="2XL">
+                                <input type="checkbox" id="size-2xl" value="2XL" name="size" {% if "2XL" in size_list %}checked{% endif %}>
+                                <label for="size-2xl">2XL</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <label for="condition">Condition *</label>
+                <select id="condition" name="condition" required>
+                    <option value="">Select condition</option>
+                    <option value="Like New" {% if listing.condition == "Like New" %}selected{% endif %}>Like New</option>
+                    <option value="Excellent" {% if listing.condition == "Excellent" %}selected{% endif %}>Excellent</option>
+                    <option value="Good" {% if listing.condition == "Good" %}selected{% endif %}>Good</option>
+                    <option value="Fair" {% if listing.condition == "Fair" %}selected{% endif %}>Fair</option>
+                </select>
+
+                <label for="location">Location (Address, City, Province, Postal Code) *</label>
+                <div class="location-input-wrapper" style="position: relative;">
+                    <input type="text" id="location" name="location" value="{{ listing.location }}" placeholder="e.g., 123 Main St, Toronto, ON or L5M 6R7" required autocomplete="off">
+                    <input type="hidden" id="location-selected" name="location-selected" value="true">
+                    <div id="location-suggestions" class="location-suggestions"></div>
+                </div>
+                <div id="location-error" style="color: #d32f2f; font-size: 0.85rem; margin-top: 0.25rem; display: none;">Please select a location from the list or choose "Other"</div>
+                <small style="color: #666; font-size: 0.85rem;">Start typing your address, city, or postal code. You must select from the list. Selected location will be formatted as: Postal Code Prefix (e.g., L5M) + City + Province</small>
+
+                <div class="form-actions">
+                    <button type="submit" class="submit-btn">Update Listing</button>
+                    <a href="{{ url_for('main.view_listing', listing_id=listing.id) }}" class="cancel-btn">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <span class="sloth-emoji">🦥</span>
+            <span>&copy; 2025 FreeFits - Free Clothing Marketplace</span>
+        </div>
+    </footer>
+
+    <script>
+        // Initialize size display with current values
+        (function() {
+            const checkboxes = document.querySelectorAll('#size-dropdown input[type="checkbox"]');
+            const sizePlaceholder = document.getElementById('size-placeholder');
+            
+            function updateDisplay() {
+                const selected = Array.from(checkboxes)
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.value);
+                
+                if (selected.length === 0) {
+                    sizePlaceholder.textContent = 'Select size(s)';
+                    sizePlaceholder.classList.remove('custom-multi-select-selected');
+                } else {
+                    sizePlaceholder.textContent = selected.join(', ');
+                    sizePlaceholder.classList.add('custom-multi-select-selected');
+                }
+            }
+            
+            // Initialize display
+            updateDisplay();
+            
+            // Update on change
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateDisplay);
+            });
+        })();
+
+        var google_places_api_key = {{ google_places_api_key | tojson }};
+        // Location Autocomplete: Google Places API (Canada only)
+        (function() {
+            const apiKey = typeof google_places_api_key !== 'undefined' ? google_places_api_key : '';
+            const locationInput = document.getElementById('location');
+            const suggestionsDiv = document.getElementById('location-suggestions');
+            const locationSelected = document.getElementById('location-selected');
+            const locationError = document.getElementById('location-error');
+            const form = locationInput.closest('form');
+            let debounceTimer;
+            let currentSuggestions = [];
+            let selectedIndex = -1;
+            let isLocationSelected = true; // true when editing existing listing with value
+
+            if (!locationInput || !suggestionsDiv) return;
+
+            form.addEventListener('submit', function(e) {
+                if (!isLocationSelected) {
+                    e.preventDefault();
+                    locationError.style.display = 'block';
+                    locationInput.style.borderColor = '#d32f2f';
+                    locationInput.focus();
+                    return false;
+                }
+            });
+
+            locationInput.addEventListener('input', function() {
+                if (locationInput.readOnly) return;
+                const query = this.value.trim();
+                clearTimeout(debounceTimer);
+                selectedIndex = -1;
+                isLocationSelected = false;
+                locationSelected.value = 'false';
+                locationError.style.display = 'none';
+                locationInput.style.borderColor = '';
+                if (query.length < 2) {
+                    suggestionsDiv.classList.remove('show');
+                    return;
+                }
+                debounceTimer = setTimeout(() => fetchGoogleSuggestions(query), 300);
+            });
+
+            locationInput.addEventListener('focus', function() {
+                if (locationInput.readOnly) {
+                    locationInput.readOnly = false;
+                    locationInput.value = '';
+                    isLocationSelected = false;
+                    locationSelected.value = 'false';
+                } else if (this.value.trim().length >= 2 && currentSuggestions.length > 0) {
+                    suggestionsDiv.classList.add('show');
+                }
+            });
+
+            function fetchGoogleSuggestions(query) {
+                const url = '/api/place-autocomplete?input=' + encodeURIComponent(query);
+                fetch(url)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+                            suggestionsDiv.classList.remove('show');
+                            currentSuggestions = [];
+                            return;
+                        }
+                        const predictions = data.predictions || [];
+                        currentSuggestions = predictions.map(p => ({ description: p.description, place_id: p.place_id }));
+                        displaySuggestions(currentSuggestions);
+                    })
+                    .catch(() => {
+                        suggestionsDiv.classList.remove('show');
+                        currentSuggestions = [];
+                    });
+            }
+
+            function displaySuggestions(results) {
+                suggestionsDiv.innerHTML = '';
+                const otherOption = { description: 'Other', isOther: true };
+                const allResults = [...results, otherOption];
+                if (allResults.length === 0) {
+                    suggestionsDiv.classList.remove('show');
+                    return;
+                }
+                allResults.forEach((result, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'location-suggestion' + (index === selectedIndex ? ' selected' : '');
+                    if (result.isOther) {
+                        div.style.fontWeight = '600';
+                        div.style.color = '#2d5a2d';
+                    }
+                    div.textContent = result.description || 'Unknown location';
+                    div.dataset.full = result.description || 'Unknown location';
+                    div.dataset.isOther = result.isOther ? 'true' : 'false';
+                    div.addEventListener('click', function() {
+                        if (result.isOther) {
+                            locationInput.value = 'Other';
+                        } else {
+                            locationInput.value = this.dataset.full;
+                        }
+                        isLocationSelected = true;
+                        locationSelected.value = 'true';
+                        locationError.style.display = 'none';
+                        locationInput.style.borderColor = '';
+                        locationInput.readOnly = true;
+                        suggestionsDiv.classList.remove('show');
+                        selectedIndex = -1;
+                    });
+                    div.addEventListener('mouseenter', function() {
+                        document.querySelectorAll('.location-suggestion').forEach(s => s.classList.remove('selected'));
+                        this.classList.add('selected');
+                        selectedIndex = index;
+                    });
+                    suggestionsDiv.appendChild(div);
+                });
+                suggestionsDiv.classList.add('show');
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!locationInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
+                }
+            });
+
+            locationInput.addEventListener('keydown', function(e) {
+                const suggestions = suggestionsDiv.querySelectorAll('.location-suggestion');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (suggestions.length) { selectedIndex = (selectedIndex + 1) % suggestions.length; updateSel(suggestions); }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (suggestions.length) { selectedIndex = selectedIndex <= 0 ? suggestions.length - 1 : selectedIndex - 1; updateSel(suggestions); }
+                } else if (e.key === 'Enter' && selectedIndex >= 0 && suggestions[selectedIndex]) {
+                    e.preventDefault();
+                    const sel = suggestions[selectedIndex];
+                    if (sel.dataset.isOther === 'true') {
+                        locationInput.value = 'Other';
+                    } else {
+                        locationInput.value = sel.dataset.full;
+                    }
+                    isLocationSelected = true;
+                    locationSelected.value = 'true';
+                    locationError.style.display = 'none';
+                    locationInput.style.borderColor = '';
+                    locationInput.readOnly = true;
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
+                } else if (e.key === 'Escape') {
+                    suggestionsDiv.classList.remove('show');
+                    selectedIndex = -1;
+                }
+            });
+            function updateSel(suggestions) {
+                suggestions.forEach((s, i) => s.classList.toggle('selected', i === selectedIndex));
+                if (suggestions[selectedIndex]) suggestions[selectedIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        })();
+
+        // Custom Multi-Select Dropdown for Size
+        (function() {
+            const sizeSelect = document.getElementById('size-select');
+            const sizeDisplay = sizeSelect.querySelector('.custom-multi-select-display');
+            const sizeDropdown = document.getElementById('size-dropdown');
+            const checkboxes = sizeDropdown.querySelectorAll('input[type="checkbox"]');
+
+            sizeDisplay.addEventListener('click', function(e) {
+                e.stopPropagation();
+                sizeSelect.classList.toggle('active');
+            });
+
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const selected = Array.from(checkboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.value);
+                    const sizePlaceholder = document.getElementById('size-placeholder');
+                    if (selected.length === 0) {
+                        sizePlaceholder.textContent = 'Select size(s)';
+                        sizePlaceholder.classList.remove('custom-multi-select-selected');
+                    } else {
+                        sizePlaceholder.textContent = selected.join(', ');
+                        sizePlaceholder.classList.add('custom-multi-select-selected');
+                    }
+                });
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!sizeSelect.contains(e.target)) {
+                    sizeSelect.classList.remove('active');
+                }
+            });
+
+            sizeDropdown.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        })();
+    </script>
+</body>
+</html>
+
