@@ -85,18 +85,21 @@ def create_app():
     def inject_google_places_key():
         return {"google_places_api_key": (cfg.GOOGLE_PLACES_API_KEY or "")}
 
-    # Inject is_admin so templates can show "Flagged" link only to admins
+    # Inject is_admin and email_verified for templates
     @app.context_processor
     def inject_is_admin():
         is_admin = False
+        email_verified = True  # default for existing users without the field
         try:
             username = session.get("username")
             if username and app.mongo_db is not None:
                 user = app.mongo_db["users"].find_one({"username": username})
-                is_admin = (user or {}).get("role") == "admin"
+                if user:
+                    is_admin = user.get("role") == "admin"
+                    email_verified = user.get("email_verified", True)
         except Exception:
             pass
-        return {"is_admin": is_admin}
+        return {"is_admin": is_admin, "email_verified": email_verified}
 
     # Prevent browser from caching HTML so deploys show up immediately
     @app.after_request

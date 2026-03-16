@@ -14,6 +14,8 @@ from app.models import (
 from app.geocoding import geocode_location, geocode_postal_code
 from app.image_validation import validate_clothing_image, validate_clothing_image_api4ai, validate_clothing_image_rekognition
 from app.s3_storage import upload_image_to_s3, get_s3_image_url, delete_image_from_s3, check_s3_configured
+from app.email_verification import make_verification_token, verify_token, send_verification_email
+from config import get_config
 import tempfile
 
 main = Blueprint("main", __name__)
@@ -285,6 +287,9 @@ def register():
         if geocode_result:
             latitude, longitude, formatted_location = geocode_result
         
+        cfg = get_config()
+        from_email = (getattr(cfg, "VERIFICATION_FROM_EMAIL", None) or "").strip()
+        email_verified = not bool(from_email)  # no verification if no SES From address
         # Everyone gets role "user" on signup. Only you can make someone admin by updating the DB (e.g. in MongoDB: db.users.updateOne({ username: "x" }, { $set: { role: "admin" } })).
         users.insert_one({
             "username": username,
@@ -295,12 +300,83 @@ def register():
             "longitude": longitude,
             "created_at": datetime.utcnow(),
             "role": "user",
+            "email_verified": email_verified,
         })
 
         session["username"] = username
+        if not email_verified and from_email:
+            token = make_verification_token(current_app.secret_key, username, email)
+            verify_url = request.host_url.rstrip("/") + url_for("main.verify_email", token=token)
+            region = getattr(cfg, "AWS_REGION", None) or "us-east-1"
+            if send_verification_email(from_email, email, username, verify_url, region):
+                flash("Welcome! Please check your email to verify your address.", "success")
+            else:
+                flash("Welcome! We could not send the verification email. You can request a new one from your account.", "warning")
+        else:
+            flash("Account created. You can log in.", "success")
         return redirect(url_for("main.home"))
 
     return render_template("register.html")
+
+
+@main.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    """Send verification email again (logged-in, unverified users)."""
+    username = session.get("username")
+    if not username:
+        flash("Please log in first.", "error")
+        return redirect(url_for("main.login"))
+    db = getattr(current_app, "mongo_db", None)
+    if db is None:
+        flash("Service unavailable.", "error")
+        return redirect(url_for("main.home"))
+    user = db["users"].find_one({"username": username})
+    if not user or user.get("email_verified", True):
+        flash("Your email is already verified.", "info")
+        return redirect(url_for("main.home"))
+    cfg = get_config()
+    from_email = (getattr(cfg, "VERIFICATION_FROM_EMAIL", None) or "").strip()
+    if not from_email:
+        flash("Verification emails are not configured.", "error")
+        return redirect(url_for("main.home"))
+    email = user.get("email", "")
+    if not email:
+        flash("No email on file.", "error")
+        return redirect(url_for("main.home"))
+    token = make_verification_token(current_app.secret_key, username, email)
+    verify_url = request.host_url.rstrip("/") + url_for("main.verify_email", token=token)
+    region = getattr(cfg, "AWS_REGION", None) or "us-east-1"
+    if send_verification_email(from_email, email, username, verify_url, region):
+        flash("Verification email sent. Check your inbox.", "success")
+    else:
+        flash("Failed to send. Try again later.", "error")
+    return redirect(url_for("main.home"))
+
+
+@main.route("/verify-email")
+def verify_email():
+    """Verify email from link in verification email."""
+    token = request.args.get("token", "").strip()
+    if not token:
+        flash("Invalid or missing verification link.", "error")
+        return redirect(url_for("main.home"))
+    username, email = verify_token(current_app.secret_key, token)
+    if not username or not email:
+        flash("Verification link is invalid or expired. Please request a new one.", "error")
+        return redirect(url_for("main.home"))
+    db = getattr(current_app, "mongo_db", None)
+    if db is None:
+        flash("Service unavailable.", "error")
+        return redirect(url_for("main.home"))
+    result = db["users"].update_one(
+        {"username": username, "email": email},
+        {"$set": {"email_verified": True}}
+    )
+    if result.modified_count:
+        flash("Your email is now verified. Thanks!", "success")
+    else:
+        flash("Email was already verified or account not found.", "info")
+    return redirect(url_for("main.home"))
 
 # --- Flag listing (report) - any logged-in user (except owner) ---
 @main.route("/listing/<listing_id>/flag", methods=["GET", "POST"])

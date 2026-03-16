@@ -20,6 +20,8 @@ class Config:
     AWS_S3_REGION = os.getenv("AWS_S3_REGION", "")  # Optional, defaults to AWS_REGION if not set
     # Admin: username that can access /admin/listings to delete any listing (set in .env)
     ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")
+    # Email verification via Amazon SES (must verify sender in SES; From address required)
+    VERIFICATION_FROM_EMAIL = os.getenv("VERIFICATION_FROM_EMAIL", "")
 
 
 def get_config():
