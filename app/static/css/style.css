@@ -847,6 +847,20 @@ footer {
     text-decoration: none;
 }
 
+/* Resend verification form in header: one button matching other nav links */
+.user-nav .nav-resend-form {
+    display: inline-block;
+    margin: 0;
+}
+.user-nav .nav-resend-form .nav-link {
+    display: inline-block;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
 /* Search section */
 .search-section {
     background: linear-gradient(135deg, rgba(244, 250, 244, 0.95), rgba(249, 254, 249, 0.96));
