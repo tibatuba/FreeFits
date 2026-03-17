@@ -700,25 +700,38 @@ def delete_user_and_data(db, username):
     if not users.find_one({"username": username}):
         return False
     # Delete all listings by this user
-    listings_coll = get_listings_collection(db)
-    if listings_coll:
-        listings_coll.delete_many({"user_id": username})
+    try:
+        listings_coll = get_listings_collection(db)
+        if listings_coll:
+            listings_coll.delete_many({"user_id": username})
+    except Exception as e:
+        print(f"WARNING: delete_user_and_data: failed to delete listings: {e}")
     # Delete all messages where they are sender or receiver
-    messages_coll = get_messages_collection(db)
-    if messages_coll:
-        messages_coll.delete_many({
-            "$or": [
-                {"sender_username": username},
-                {"receiver_username": username}
-            ]
-        })
+    try:
+        messages_coll = get_messages_collection(db)
+        if messages_coll:
+            messages_coll.delete_many({
+                "$or": [
+                    {"sender_username": username},
+                    {"receiver_username": username}
+                ]
+            })
+    except Exception as e:
+        print(f"WARNING: delete_user_and_data: failed to delete messages: {e}")
     # Anonymize flags they reported (keep for moderation history)
-    flags_coll = get_flags_collection(db)
-    if flags_coll:
-        flags_coll.update_many(
-            {"reporter_username": username},
-            {"$set": {"reporter_username": "[deleted]"}}
-        )
+    try:
+        flags_coll = get_flags_collection(db)
+        if flags_coll:
+            flags_coll.update_many(
+                {"reporter_username": username},
+                {"$set": {"reporter_username": "[deleted]"}}
+            )
+    except Exception as e:
+        print(f"WARNING: delete_user_and_data: failed to anonymize flags: {e}")
     # Delete the user
-    result = users.delete_one({"username": username})
-    return result.deleted_count > 0
+    try:
+        result = users.delete_one({"username": username})
+        return result.deleted_count > 0
+    except Exception as e:
+        print(f"ERROR: delete_user_and_data: failed to delete user: {e}")
+        return False

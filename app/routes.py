@@ -236,10 +236,15 @@ def delete_account():
         if confirm != username:
             flash("Confirmation did not match your username. Account was not deleted.", "error")
             return redirect(url_for("main.delete_account"))
-        if delete_user_and_data(db, username):
-            session.pop("username", None)
-            flash("Your account and all associated data have been permanently deleted.", "success")
-            return redirect(url_for("main.home"))
+        try:
+            if delete_user_and_data(db, username):
+                session.pop("username", None)
+                flash("Your account and all associated data have been permanently deleted.", "success")
+                return redirect(url_for("main.home"))
+        except Exception as e:
+            current_app.logger.exception("Delete account failed: %s", e)
+            flash("Could not delete account. Please try again.", "error")
+            return redirect(url_for("main.delete_account"))
         flash("Could not delete account. Please try again.", "error")
         return redirect(url_for("main.delete_account"))
     return render_template("delete_account.html", username=username)
