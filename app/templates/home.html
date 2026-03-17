@@ -1,4 +1,4 @@
-image.png<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -19,6 +19,11 @@ image.png<!DOCTYPE html>
             <nav class="user-nav">
                 {% if username %}
                     <span class="welcome">Welcome, {{ username }}!</span>
+                    {% if not email_verified %}
+                    <form action="{{ url_for('main.resend_verification') }}" method="post" style="display: inline; margin: 0;">
+                        <button type="submit" class="nav-link" style="background: none; border: none; cursor: pointer; font: inherit; color: inherit; padding: 0; text-decoration: underline;">Resend verification email</button>
+                    </form>
+                    {% endif %}
                     <a href="{{ url_for('main.messages') }}" class="nav-link messages-link">
                         Messages
                         {% if unread_count and unread_count > 0 %}
@@ -47,6 +52,15 @@ image.png<!DOCTYPE html>
                 {% endfor %}
             {% endif %}
         {% endwith %}
+
+        {% if username and not email_verified %}
+        <div class="flash-message flash-warning" style="margin: 1rem auto; max-width: 600px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+            <span>Please verify your email. Check your inbox for the link.</span>
+            <form action="{{ url_for('main.resend_verification') }}" method="post" style="margin: 0;">
+                <button type="submit" class="btn ghost" style="padding: 0.25rem 0.75rem; font-size: 0.9rem;">Resend verification email</button>
+            </form>
+        </div>
+        {% endif %}
 
         <!-- Hero Section -->
         <section class="hero">
