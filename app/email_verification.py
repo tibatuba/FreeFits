@@ -1,5 +1,6 @@
 """Email verification: signed tokens and sending via Amazon SES."""
 import logging
+import sys
 import boto3
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
@@ -42,6 +43,7 @@ def send_verification_email(
     <p>— FreeFits</p>
     """.strip()
     try:
+        logger.info("SES: sending verification email to %s (from=%s region=%s)", to_email, from_email, region)
         client = boto3.client("ses", region_name=region)
         client.send_email(
             Source=from_email.strip(),
@@ -56,4 +58,6 @@ def send_verification_email(
         return True
     except Exception as e:
         logger.warning("SES send_verification_email failed: %s", e, exc_info=True)
+        # Also print to stderr so it shows in journalctl even if logging isn't configured
+        print("FreeFits SES ERROR:", type(e).__name__, str(e), file=sys.stderr, flush=True)
         return False
