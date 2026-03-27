@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resend verification - FreeFits</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=4">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1 class="site-logo">
+                <a href="{{ url_for('main.home') }}" class="logo-link">
+                    <img src="{{ url_for('static', filename='images/headerlogo.png') }}"
+                         alt="FreeFits Logo"
+                         class="logo-img">
+                </a>
+            </h1>
+            <nav class="user-nav">
+                <a href="{{ url_for('main.home') }}" class="nav-link">Home</a>
+                <a href="{{ url_for('main.login') }}" class="nav-link">Login</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="auth-container">
+            <div class="auth-header">
+                <h2>Resend Verification Email</h2>
+                <p class="subtitle">Enter your account details to receive a new verification link</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form action="{{ url_for('main.resend_verification_request') }}" method="post" class="auth-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Enter your username" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="Enter your account email" required>
+                </div>
+
+                <button type="submit" class="auth-btn">Send verification email</button>
+            </form>
+
+            <div class="auth-footer">
+                <p class="back-link">
+                    <a href="{{ url_for('main.login') }}">← Back to Login</a>
+                </p>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

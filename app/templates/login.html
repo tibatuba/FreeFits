@@ -58,6 +58,7 @@
 
             <div class="auth-footer">
                 <p>Not registered? <a href="{{ url_for('main.register') }}">Create an account</a></p>
+                <p>Didn't get the email? <a href="{{ url_for('main.resend_verification_request') }}">Resend verification email</a></p>
                 <p class="back-link">
                     <a href="{{ url_for('main.home') }}">← Back to Home</a>
                 </p>

@@ -207,6 +207,9 @@ def login():
         user = db["users"].find_one({"username": username})
         if not user or not check_password_hash(user.get("password_hash", ""), password):
             return render_template("login.html", error="Invalid username or password.")
+        if not user.get("email_verified", True):
+            flash("Please verify your email before logging in.", "warning")
+            return redirect(url_for("main.resend_verification_request"))
 
         session["username"] = username
         return redirect(url_for("main.home"))
@@ -308,18 +311,19 @@ def register():
             "email_verified": email_verified,
         })
 
-        session["username"] = username
         if not email_verified and from_email:
             token = make_verification_token(current_app.secret_key, username, email)
             verify_url = request.host_url.rstrip("/") + url_for("main.verify_email", token=token)
             region = getattr(cfg, "AWS_REGION", None) or "us-east-1"
             if send_verification_email(from_email, email, username, verify_url, region):
-                flash("Welcome! Please check your email to verify your address.", "success")
+                flash("Account created. Please check your email to verify your address before logging in.", "success")
             else:
-                flash("Welcome! We could not send the verification email. You can request a new one from your account.", "warning")
+                flash("Account created, but we could not send the verification email. Use 'Resend verification email' from the login page.", "warning")
+            return redirect(url_for("main.login"))
         else:
+            session["username"] = username
             flash("Account created. You can log in.", "success")
-        return redirect(url_for("main.home"))
+            return redirect(url_for("main.home"))
 
     return render_template("register.html")
 
@@ -356,6 +360,48 @@ def resend_verification():
     else:
         flash("Failed to send. Try again later.", "error")
     return redirect(url_for("main.home"))
+
+
+@main.route("/resend-verification-request", methods=["GET", "POST"])
+def resend_verification_request():
+    """Send verification email for users not logged in yet."""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        email = (request.form.get("email") or "").strip().lower()
+        if not username or not email:
+            flash("Username and email are required.", "error")
+            return redirect(url_for("main.resend_verification_request"))
+        db = getattr(current_app, "mongo_db", None)
+        if db is None:
+            flash("Service unavailable.", "error")
+            return redirect(url_for("main.login"))
+        user = db["users"].find_one({"username": username})
+        if not user:
+            flash("Account not found.", "error")
+            return redirect(url_for("main.resend_verification_request"))
+        stored_email = (user.get("email") or "").strip().lower()
+        if stored_email != email:
+            flash("Username and email do not match.", "error")
+            return redirect(url_for("main.resend_verification_request"))
+        if user.get("email_verified", True):
+            flash("This account is already verified. You can log in.", "info")
+            return redirect(url_for("main.login"))
+
+        cfg = get_config()
+        from_email = (getattr(cfg, "VERIFICATION_FROM_EMAIL", None) or "").strip()
+        if not from_email:
+            flash("Verification emails are not configured.", "error")
+            return redirect(url_for("main.login"))
+        token = make_verification_token(current_app.secret_key, username, stored_email)
+        verify_url = request.host_url.rstrip("/") + url_for("main.verify_email", token=token)
+        region = getattr(cfg, "AWS_REGION", None) or "us-east-1"
+        if send_verification_email(from_email, stored_email, username, verify_url, region):
+            flash("Verification email sent. Check your inbox.", "success")
+            return redirect(url_for("main.login"))
+        flash("Failed to send. Try again later.", "error")
+        return redirect(url_for("main.resend_verification_request"))
+
+    return render_template("resend_verification.html")
 
 
 @main.route("/verify-email")
