@@ -28,6 +28,7 @@
         <p class="muted">Your report will be reviewed by moderators. Only use this for listings that violate community guidelines.</p>
 
         <form action="{{ url_for('main.flag_listing', listing_id=listing.id) }}" method="post" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="reason">Reason (optional but helpful)</label>
                 <textarea id="reason" name="reason" rows="4" placeholder="e.g. Spam, inappropriate content, wrong category..."></textarea>

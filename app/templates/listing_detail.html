@@ -93,11 +93,13 @@
                             <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
                                 <a href="{{ url_for('main.edit_listing', listing_id=listing.id) }}" class="contact-btn-large" style="background-color: #2d5a2d; text-decoration: none; display: inline-block; text-align: center;">✏️ Edit Listing</a>
                                 <form action="{{ url_for('main.delete_listing_route', listing_id=listing.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this listing? This action cannot be undone.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="contact-btn-large" style="background-color: #d32f2f;">🗑️ Delete Listing</button>
                                 </form>
                             </div>
                         {% elif username and username != listing.user_id %}
                             <form action="{{ url_for('main.contact_seller', listing_id=listing.id) }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="contact-btn-large">💬 Contact Seller</button>
                             </form>
                             <a href="{{ url_for('main.flag_listing', listing_id=listing.id) }}" class="nav-link" style="margin-left: 0.5rem; font-size: 0.9rem;">Report listing</a>

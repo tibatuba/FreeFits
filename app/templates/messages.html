@@ -106,6 +106,7 @@
 
                         <div class="message-input-container">
                             <form action="{{ url_for('main.send_message') }}" method="POST" class="message-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="conversation_id" value="{{ conversation_id }}">
                                 <input type="hidden" name="receiver_username" value="{{ other_user }}">
                                 {% if listing %}

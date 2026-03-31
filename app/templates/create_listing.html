@@ -43,6 +43,7 @@
             {% set form = form|default({}) %}
             {% set form_size_list = form_size_list|default([]) %}
             <form action="{{ url_for('main.create_listing_page') }}" method="POST" class="create-form" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="image">Item Image *</label>
                 <input type="file" id="image" name="image" accept="image/*" required>
                 <small style="color: #666; font-size: 0.85rem;">Upload one image of your item (JPG, PNG, etc.)</small>

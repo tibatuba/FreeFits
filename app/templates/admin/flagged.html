@@ -68,10 +68,12 @@
                             <td>{{ item.flag.created_at.strftime('%Y-%m-%d %H:%M') if item.flag.created_at else '-' }}</td>
                             <td>
                                 <form action="{{ url_for('main.admin_resolve_flag', flag_id=item.flag.id) }}" method="post" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="status" value="resolved">
                                     <button type="submit" class="resolve-btn">Resolve</button>
                                 </form>
                                 <form action="{{ url_for('main.admin_resolve_flag', flag_id=item.flag.id) }}" method="post" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="status" value="dismissed">
                                     <button type="submit" class="resolve-btn">Dismiss</button>
                                 </form>

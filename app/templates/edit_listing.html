@@ -41,6 +41,7 @@
             {% endif %}
 
             <form action="{{ url_for('main.edit_listing', listing_id=listing.id) }}" method="POST" class="create-form" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="image">Item Image</label>
                 {% if image_url %}
                     <div style="margin-bottom: 0.5rem;">

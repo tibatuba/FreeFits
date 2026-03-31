@@ -39,6 +39,7 @@
             {% endwith %}
 
             <form action="{{ url_for('main.resend_verification_request') }}" method="post" class="auth-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label for="username">Username</label>
                     <input type="text" id="username" name="username" placeholder="Enter your username" required>

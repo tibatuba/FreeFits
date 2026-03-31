@@ -44,6 +44,7 @@
                 {% endif %}
             {% endwith %}
             <form action="{{ url_for('main.delete_account') }}" method="post" class="auth-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label for="confirm">Type your username: <strong>{{ username }}</strong></label>
                     <input type="text" id="confirm" name="confirm" placeholder="Enter your username to confirm" required autocomplete="off">

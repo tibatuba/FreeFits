@@ -21,6 +21,7 @@
                     <span class="welcome">Welcome, {{ username }}!</span>
                     {% if not email_verified %}
                     <form action="{{ url_for('main.resend_verification') }}" method="post" class="nav-resend-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="nav-link">Resend verification email</button>
                     </form>
                     {% endif %}
