@@ -124,9 +124,28 @@ def create_app():
             abort(400, description="CSRF token missing or invalid.")
         return None
 
-    # Prevent browser from caching HTML so deploys show up immediately
+    # Security headers (also when ALB targets Gunicorn directly; Nginx may duplicate if both are in path)
+    _CSP = (
+        "default-src 'self'; "
+        "img-src 'self' data: https://*.s3.amazonaws.com https://*.amazonaws.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https://nominatim.openstreetmap.org https://geocoder.ca "
+        "https://maps.googleapis.com;"
+    )
+
     @app.after_request
-    def add_no_cache_headers(response):
+    def add_response_headers(response):
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
+        response.headers["Content-Security-Policy"] = _CSP
         if response.content_type and "text/html" in response.content_type:
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
