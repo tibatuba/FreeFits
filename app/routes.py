@@ -36,8 +36,8 @@ def require_admin():
 
 @main.route("/api/ping")
 def api_ping():
-    """Simple health check; confirms the deployed app has the latest routes."""
-    return jsonify({"ok": True})
+    """Health check for ALB/nginx (GET only; no auth, no CSRF on GET)."""
+    return "ok", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 def get_image_url(image_key):
