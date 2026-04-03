@@ -2,8 +2,13 @@ from pathlib import Path
 import hmac
 import secrets
 
-from flask import Flask, session, request, abort
 from dotenv import load_dotenv
+
+# Load .env before importing config — Config reads os.environ at import time.
+_ENV_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_ENV_ROOT / ".env")
+
+from flask import Flask, session, request, abort
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError
 from werkzeug.security import generate_password_hash  # ensure available
@@ -12,9 +17,7 @@ from config import get_config
 
 
 def create_app():
-    # Load .env from project root (so it works when gunicorn starts from any CWD)
-    root = Path(__file__).resolve().parent.parent
-    load_dotenv(root / ".env")
+    load_dotenv(_ENV_ROOT / ".env")
 
     app = Flask(__name__)
 
