@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError
 from werkzeug.security import generate_password_hash  # ensure available
+from werkzeug.middleware.proxy_fix import ProxyFix
 from config import get_config
 
 
@@ -20,6 +21,23 @@ def create_app():
     # Load config
     cfg = get_config()
     app.secret_key = cfg.SECRET_KEY
+    app.config.update(
+        SESSION_COOKIE_SECURE=cfg.SESSION_COOKIE_SECURE,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
+    if cfg.TRUST_PROXY:
+        # x_for: entries in X-Forwarded-For (ALB + nginx often => 2). x_proto stays 1
+        # because nginx forwards a single X-Forwarded-Proto from the edge.
+        hops = cfg.TRUST_PROXY_HOPS
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=hops,
+            x_proto=1,
+            x_host=1,
+            x_port=1,
+            x_prefix=0,
+        )
 
     # Initialize MongoDB client if URI provided
     app.mongo_client = None
