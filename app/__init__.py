@@ -4,16 +4,32 @@ import secrets
 
 from dotenv import load_dotenv
 
-# Load .env before importing config — Config reads os.environ at import time.
+# Load .env before importing config (see get_config() instantiation in config.py).
 _ENV_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ENV_ROOT / ".env")
 
-from flask import Flask, session, request, abort
+from flask import Flask, has_request_context, session, request, abort
+from flask.sessions import SecureCookieSessionInterface
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError
 from werkzeug.security import generate_password_hash  # ensure available
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import get_config
+
+
+class ProxyHttpsCookieSessionInterface(SecureCookieSessionInterface):
+    """Use Secure on session cookies when the edge sends X-Forwarded-Proto: https (ALB / nginx)."""
+
+    def get_cookie_secure(self, app):
+        if app.config["SESSION_COOKIE_SECURE"]:
+            return True
+        if not has_request_context():
+            return False
+        proto = (request.headers.get("X-Forwarded-Proto") or "").strip()
+        if not proto:
+            return False
+        last = proto.split(",")[-1].strip().lower()
+        return last == "https"
 
 
 def create_app():
@@ -29,6 +45,7 @@ def create_app():
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
     )
+    app.session_interface = ProxyHttpsCookieSessionInterface()
     if cfg.TRUST_PROXY:
         # x_for: entries in X-Forwarded-For (ALB + nginx often => 2). x_proto stays 1
         # because nginx forwards a single X-Forwarded-Proto from the edge.
