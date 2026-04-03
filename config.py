@@ -42,6 +42,8 @@ class Config:
             self.SESSION_COOKIE_SECURE = _env_truthy("SESSION_COOKIE_SECURE")
         else:
             self.SESSION_COOKIE_SECURE = self.TRUST_PROXY
+        self.SESSION_COOKIE_HTTPONLY = True
+        self.SESSION_COOKIE_SAMESITE = "Lax"
 
 
 def get_config() -> Config:
